@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Roost Mortgage Broker",
+    "slug": "mb-dev-native",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#CB003F"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.roostapp.mortgagebroker"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#CB003F"
+      },
+      "package": "com.roostapp.mortgagebroker"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
