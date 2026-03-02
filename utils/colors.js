@@ -11,7 +11,7 @@ export const COLORS = {
   
   // Neutral Colors
   background: '#F6F6F6',
-  black: '#0E1D1D',
+  black: '#1D2327',
   slate: '#707070',
   gray: '#A9A9A9',
   silver: '#F6F6F6',

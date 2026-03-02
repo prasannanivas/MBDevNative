@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,28 +6,60 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Image,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import COLORS from '../utils/colors';
+import Logo from '../components/Logo';
+import { StatusBar } from 'expo-status-bar';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const { login } = useAuth();
+
+  // Create refs for form inputs
+  const passwordInputRef = useRef(null);
+  const emailInputRef = useRef(null);
+
+  // Handle input submission and focus next field
+  const focusNextInput = (nextInput) => {
+    if (nextInput && nextInput.current) {
+      try {
+        if (typeof nextInput.current.focus === 'function') {
+          nextInput.current.focus();
+        }
+      } catch (error) {
+        console.log('Error focusing input:', error);
+      }
+    }
+  };
+
+  const handleResetPassword = () => {
+    // Navigate to password reset or show alert
+    Alert.alert(
+      'Reset Password',
+      'Password reset functionality will be implemented soon. Please contact support for assistance.',
+      [{ text: 'OK' }]
+    );
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      setError('Email and password required.');
       return;
     }
 
     console.log('=== STARTING LOGIN PROCESS ===');
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch('https://signup.roostapp.io/admin/login', {
         method: 'POST',
@@ -91,161 +123,260 @@ const LoginScreen = ({ navigation }) => {
           }
           // Navigation will be handled automatically by App.js
         } else {
-          Alert.alert('Login Failed', 'This account is not a mortgage broker account');
+          setError('This account is not a mortgage broker account');
         }
       } else {
-        Alert.alert('Login Failed', data.error || 'Invalid credentials');
+        setError('Check the account information you entered and try again.');
       }
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', 'An error occurred during login. Please try again.');
+      setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        {/* Logo Area */}
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>ROOST</Text>
-          <Text style={styles.subtitle}>Mortgage Broker</Text>
-        </View>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 0.8 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 4 : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          style={styles.scrollView}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          accessible={true}
+        >
+          {/* Brand Logo */}
+          <Logo
+            width={120}
+            height={42}
+            variant="black"
+            style={styles.brandLogo}
+          />
 
-        {/* Login Form */}
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.description}>Sign in to continue</Text>
+          {/* Error Message */}
+          {error && (
+            <Text
+              style={styles.errorText}
+              accessible={true}
+              accessibilityLabel={`Error: ${error}`}
+            >
+              {error}
+            </Text>
+          )}
 
+          {/* Email Input */}
           <TextInput
+            ref={emailInputRef}
             style={styles.input}
             placeholder="Email"
             placeholderTextColor={COLORS.gray}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
             keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={(t) => {
+              setEmail(t);
+              if (error) setError(null);
+            }}
+            textContentType="username"
+            autoComplete="username"
+            autoCorrect={false}
+            accessible={true}
+            accessibilityLabel="Email input"
+            returnKeyType="next"
+            onSubmitEditing={() => focusNextInput(passwordInputRef)}
+            blurOnSubmit={false}
             editable={!isLoading}
           />
 
+          {/* Password Input */}
           <TextInput
+            ref={passwordInputRef}
             style={styles.input}
             placeholder="Password"
             placeholderTextColor={COLORS.gray}
-            value={password}
-            onChangeText={setPassword}
             secureTextEntry
+            value={password}
+            onChangeText={(t) => {
+              setPassword(t);
+              if (error) setError(null);
+            }}
+            textContentType="password"
+            autoComplete="password"
+            autoCorrect={false}
+            accessible={true}
+            accessibilityLabel="Password input"
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
             editable={!isLoading}
           />
 
+          {/* Reset Password */}
           <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
+            onPress={handleResetPassword}
+            accessible={true}
+            accessibilityLabel="Reset password"
+            accessibilityRole="button"
+            style={styles.resetPasswordButton}
           >
-            {isLoading ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            )}
+            <Text style={styles.resetPasswordText}>RESET PASSWORD</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          {/* Log In Button */}
+          <TouchableOpacity
+            style={[
+              styles.loginButton,
+              isLoading && styles.loginButtonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={isLoading}
+            accessible={true}
+            accessibilityLabel="Log in"
+            accessibilityRole="button"
+          >
+            <Text style={styles.loginButtonText}>
+              {isLoading ? 'Logging in...' : 'Log In'}
+            </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Footer (dark background) */}
+      <View style={styles.footerContainer}>
+        <Text style={styles.footerText}>
+          By logging in, you agree to Roost's{' '}
+          <Text
+            style={styles.linkText}
+            onPress={() => {
+              Linking.openURL('https://roostapp.io/terms-of-service');
+            }}
+            accessibilityRole="link"
+          >
+            Terms of Use
+          </Text>{' '}
+          and{' '}
+          <Text
+            style={styles.linkText}
+            onPress={() => {
+              Linking.openURL('https://roostapp.io/privacy');
+            }}
+            accessibilityRole="link"
+          >
+            Privacy&nbsp;Policy
+          </Text>
+          .
+        </Text>
+        <Text style={styles.footerText}>
+          By providing your email & phone number, you consent to receive
+          communications from Roost. You can opt-out anytime.
+        </Text>
       </View>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
   container: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-  },
-  logoContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 20,
     alignItems: 'center',
-    marginBottom: 50,
+    minHeight: '100%',
+    backgroundColor: COLORS.background,
   },
-  logoText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: COLORS.white,
-    letterSpacing: 2,
-    fontFamily: 'futura',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.white,
-    marginTop: 5,
-    fontFamily: 'futura',
-  },
-  formContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.black,
-    marginBottom: 5,
-    fontFamily: 'futura',
-  },
-  description: {
-    fontSize: 14,
-    color: COLORS.slate,
-    marginBottom: 25,
-    fontFamily: 'futura',
+  brandLogo: {
+    marginBottom: 64,
+    alignSelf: 'center',
+    marginTop: 64,
+    backgroundColor: COLORS.background,
   },
   input: {
-    backgroundColor: COLORS.background,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-    fontSize: 16,
+    width: '100%',
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.gray,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: '500',
     color: COLORS.black,
-    fontFamily: 'futura',
+    backgroundColor: COLORS.white,
+    fontFamily: 'Futura',
+  },
+  resetPasswordButton: {
+    alignSelf: 'flex-end',
+  },
+  resetPasswordText: {
+    alignSelf: 'flex-end',
+    color: COLORS.slate,
+    marginBottom: 24,
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'Futura',
   },
   loginButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    padding: 15,
+    width: '100%',
+    height: 48,
+    backgroundColor: COLORS.green,
+    borderRadius: 50,
+    justifyContent: 'center',
+    display: 'flex',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
-  },
-  loginButtonDisabled: {
-    opacity: 0.6,
+    marginBottom: 24,
   },
   loginButtonText: {
     color: COLORS.white,
-    fontSize: 16,
-    fontWeight: 'bold',
-    fontFamily: 'futura',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'Futura',
   },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: 15,
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
-  forgotPasswordText: {
-    color: COLORS.primary,
+  errorText: {
+    color: COLORS.red,
+    marginBottom: 16,
+    textAlign: 'center',
     fontSize: 14,
-    fontFamily: 'futura',
+    fontWeight: '500',
+    fontFamily: 'Futura',
+  },
+  footerContainer: {
+    height: 120,
+    position: 'absolute',
+    alignItems: 'center',
+    width: '100%',
+    bottom: 0,
+    backgroundColor: COLORS.black,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  footerText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.gray,
+    marginBottom: 4,
+    textAlign: 'center',
+    lineHeight: 15,
+    fontFamily: 'Futura',
+  },
+  linkText: {
+    color: COLORS.gray,
+    textDecorationLine: 'underline',
   },
 });
 
