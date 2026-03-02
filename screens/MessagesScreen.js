@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +17,10 @@ import COLORS from '../utils/colors';
 import { getRelativeTime } from '../utils/dateUtils';
 import MessageFilterModal from '../components/MessageFilterModal';
 import ChatModal from '../components/ChatModal';
+import Header from '../components/Header';
+import ClientCard from '../components/ClientCard';
+import MessageIcon from '../components/icons/MessageIcon';
+import AlertIcon from '../components/icons/AlertIcon';
 
 const MessagesScreen = () => {
   const { broker, authToken } = useAuth();
@@ -55,7 +60,7 @@ const MessagesScreen = () => {
           .filter(chat => chat.participants?.client != null)
           .map(chat => {
             const client = chat.participants.client;
-            console.log('=== CLIENT DATA ===', JSON.stringify(client, null, 2));
+          
             const nameParts = (client.name || '').split(' ');
             return {
               _id: chat._id,
@@ -79,6 +84,22 @@ const MessagesScreen = () => {
         if (selectedFilter === 'Unread') {
           filtered = chats.filter(c => c.unreadCount > 0);
         }
+        
+        // Sort conversations: recent messages first, empty messages last
+        filtered = filtered.sort((a, b) => {
+          const hasMessageA = a.lastMessage && a.lastMessage.trim() !== '';
+          const hasMessageB = b.lastMessage && b.lastMessage.trim() !== '';
+          
+          // If one has a message and the other doesn't, prioritize the one with message
+          if (hasMessageA && !hasMessageB) return -1;
+          if (!hasMessageA && hasMessageB) return 1;
+          
+          // If both have messages or both don't have messages, sort by timestamp
+          const timeA = new Date(a.lastMessageAt || 0);
+          const timeB = new Date(b.lastMessageAt || 0);
+          
+          return timeB - timeA; // Most recent first
+        });
         
         setConversations(filtered);
       }
@@ -107,99 +128,32 @@ const MessagesScreen = () => {
   const renderConversationItem = ({ item }) => {
     const isUnread = item.unreadCount > 0;
     const participant = item.participant || {};
+    const clientName = `${participant.firstName || ''} ${participant.lastName || ''}`.trim();
 
     return (
-      <TouchableOpacity
-        style={[styles.conversationCard, isUnread && styles.unreadCard]}
+      <ClientCard
+        clientName={clientName}
+        showStatus={false}
+        showInitials={false}
+        lastMessage={item.lastMessage}
         onPress={() => handleConversationPress(item)}
-        activeOpacity={0.7}
       >
-        <View style={styles.conversationContent}>
-          {/* Avatar */}
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {participant.firstName?.[0]}{participant.lastName?.[0]}
-            </Text>
-          </View>
+        {/* Message Icon */}
+        <TouchableOpacity
+          onPress={() => handleConversationPress(item)}
+        >
+          <MessageIcon width={43} height={43} />
+        </TouchableOpacity>
 
-          {/* Message Info */}
-          <View style={styles.messageInfo}>
-            <View style={styles.messageHeader}>
-              <Text style={[styles.participantName, isUnread && styles.unreadText]}>
-                {participant.firstName} {participant.lastName}
-              </Text>
-              <Text style={styles.timestamp}>
-                {getRelativeTime(item.lastMessageAt)}
-              </Text>
-            </View>
-            <Text
-              style={[styles.lastMessage, isUnread && styles.unreadText]}
-              numberOfLines={1}
-            >
-              {item.lastMessage}
-            </Text>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            {/* Chat Icon */}
-            <TouchableOpacity
-              style={styles.actionIcon}
-              onPress={() => handleConversationPress(item)}
-            >
-              <Ionicons name="chatbubble" size={22} color={COLORS.green} />
-            </TouchableOpacity>
-
-            {/* Notification Icon */}
-            <TouchableOpacity
-              style={styles.actionIcon}
-              onPress={() => {/* Handle notification */}}
-            >
-              <Ionicons name="notifications-outline" size={22} color={COLORS.green} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Unread Badge */}
-        {isUnread && (
-          <View style={styles.unreadBadge}>
-            <View style={styles.unreadDot} />
-          </View>
-        )}
-      </TouchableOpacity>
+        {/* Alert Icon */}
+        <TouchableOpacity
+          onPress={() => {/* Handle notification */}}
+        >
+          <AlertIcon width={43} height={43} />
+        </TouchableOpacity>
+      </ClientCard>
     );
   };
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      {/* Broker Info */}
-      <View style={styles.brokerInfo}>
-        <View style={styles.brokerAvatar}>
-          <Ionicons name="person" size={24} color={COLORS.white} />
-        </View>
-        <View>
-          <Text style={styles.brokerName}>
-            {broker.name || 'Mortgage Broker'}
-          </Text>
-          <Text style={styles.brokerCompany}>
-            {broker.company?.city || broker.company?.address || 'Mortgage Broker'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Messages Header and Filter */}
-      <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>MESSAGES</Text>
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={handleFilterPress}
-        >
-          <Text style={styles.filterButtonText}>{selectedFilter}</Text>
-          <Ionicons name="chevron-down" size={16} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -221,11 +175,34 @@ const MessagesScreen = () => {
 
   return (
     <View style={styles.container}>
+      <Header />
+      
       <FlatList
         data={conversations}
         renderItem={renderConversationItem}
         keyExtractor={(item) => item._id}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <View style={styles.headerContainer}>
+            
+            <View style={styles.titleContainer}>
+              <Text style={styles.sectionTitle}>MESSAGES</Text>
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={handleFilterPress}
+              >
+                <Text style={styles.filterButtonText}>{selectedFilter}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.leftSection}>
+              <TouchableOpacity
+                style={[styles.unreadButton, selectedFilter === 'Unread' && styles.unreadButtonActive]}
+                onPress={() => setSelectedFilter(selectedFilter === 'Unread' ? 'All' : 'Unread')}
+              >
+                <Text style={[styles.unreadButtonText, selectedFilter === 'Unread' && styles.unreadButtonTextActive]}>Unread</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        }
         ListEmptyComponent={renderEmptyState}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -268,157 +245,131 @@ const MessagesScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#f8f9fa',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: '#f8f9fa',
   },
   listContent: {
     flexGrow: 1,
   },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  brokerInfo: {
+  headerContainer: {
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingBottom: 2,
+    paddingTop: 20,
+    display: 'flex',
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
   },
-  brokerAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  leftSection: {
+    marginBottom: 12,
   },
-  brokerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
-  brokerCompany: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-  },
-  headerRow: {
+  titleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
   sectionTitle: {
+    color: "#797979",
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: 'futura',
+  },
+  unreadButton: {
+    borderColor: "#377473",
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 788,
+    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  unreadButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  unreadButtonText: {
+    fontFamily: 'futura',
+    fontWeight: '700',
     fontSize: 14,
-    fontWeight: '600',
+    color: '#377473',
+  },
+  unreadButtonTextActive: {
     color: COLORS.white,
-    letterSpacing: 1,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   filterButtonText: {
-    color: COLORS.white,
-    fontSize: 14,
+    color: '#FDFDFD',
+    fontSize: 12,
     fontWeight: '600',
-    marginRight: 4,
+    fontFamily: 'futura',
   },
   conversationCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#ffffff',
     marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
+    marginVertical: 6,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
-  },
-  unreadCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
   },
   conversationContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.slate,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
   messageInfo: {
     flex: 1,
   },
-  messageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
   participantName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: COLORS.black,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: COLORS.gray,
+    color: '#000000',
+    marginBottom: 4,
   },
   lastMessage: {
     fontSize: 14,
-    color: COLORS.slate,
+    color: '#8E8E93',
+    lineHeight: 18,
   },
   unreadText: {
     fontWeight: '700',
-    color: COLORS.black,
+    color: '#000000',
   },
   actionButtons: {
-    flexDirection: 'column',
-    gap: 8,
-    marginLeft: 12,
+    flexDirection: 'row',
+    gap: 12,
+    marginLeft: 16,
   },
   actionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.greenLight,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#5A9',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   emptyState: {
     flex: 1,

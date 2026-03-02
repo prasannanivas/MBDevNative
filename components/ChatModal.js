@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -131,7 +132,7 @@ const ChatModal = ({ visible, onClose, conversation }) => {
     const participant = conversation.participant || {};
     const clientInitials = (participant.firstName?.[0] || '') + (participant.lastName?.[0] || '');
     const brokerInitials = (broker.name || 'MB').split(' ').map(n => n[0]).join('').toUpperCase();
-
+    
     return (
       <View
         style={[
@@ -173,7 +174,15 @@ const ChatModal = ({ visible, onClose, conversation }) => {
         {/* Broker Avatar (right side) */}
         {isBroker && (
           <View style={styles.brokerAvatar}>
-            <Text style={styles.avatarText}>{brokerInitials}</Text>
+            {broker.profilePicture ? (
+              <Image
+                source={{ uri: `https://signup.roostapp.io/admin/profile-picture/${broker.profilePicture}` }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.avatarText}>{brokerInitials}</Text>
+            )}
           </View>
         )}
       </View>
@@ -367,6 +376,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 16,
     marginBottom: 2,
+    overflow: 'hidden',
   },
   brokerAvatar: {
     width: 40,
@@ -376,6 +386,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     color: COLORS.white,

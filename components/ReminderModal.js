@@ -7,59 +7,85 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  TextInput,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../context/AuthContext';
 import COLORS from '../utils/colors';
 
 const ReminderModal = ({ visible, onClose, client }) => {
-  const { authToken } = useAuth();
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [customDate, setCustomDate] = useState(new Date());
+  const { broker, authToken } = useAuth();
+  const [step, setStep] = useState(1); // 1: Date, 2: Custom Date, 3: Type
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedType, setSelectedType] = useState(null);
+  const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Custom date inputs
+  const [customDay, setCustomDay] = useState('');
+  const [customMonth, setCustomMonth] = useState('');
+  const [customYear, setCustomYear] = useState('');
 
-  const quickOptions = [
-    { label: '30 minutes', minutes: 30 },
-    { label: '1 hour', minutes: 60 },
-    { label: '2 hours', minutes: 120 },
-    { label: '4 hours', minutes: 240 },
-    { label: 'Tomorrow 9 AM', value: 'tomorrow9am' },
-    { label: 'Custom', value: 'custom' },
-  ];
+  const dateOptions = ['Today', 'Tomorrow', 'Next week', 'Next month', 'Custom'];
+  const typeOptions = ['Call client', 'Call Realtor', 'Message client', 'Message Realtor'];
 
-  const handleOptionSelect = (option) => {
-    if (option.value === 'custom') {
-      setShowDatePicker(true);
-    } else if (option.value === 'tomorrow9am') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(9, 0, 0, 0);
-      setSelectedTime(tomorrow);
-    } else {
-      const reminderTime = new Date();
-      reminderTime.setMinutes(reminderTime.getMinutes() + option.minutes);
-      setSelectedTime(reminderTime);
+  const handleDateSelect = (option) => {
+    Keyboard.dismiss();
+    if (option === 'Custom') {
+      setStep(2);
+      return;
     }
+    
+    let date = new Date();
+    switch(option) {
+      case 'Today':
+        date.setHours(date.getHours() + 1, 0, 0, 0);
+        break;
+      case 'Tomorrow':
+        date.setDate(date.getDate() + 1);
+        date.setHours(9, 0, 0, 0);
+        break;
+      case 'Next week':
+        date.setDate(date.getDate() + 7);
+        date.setHours(9, 0, 0, 0);
+        break;
+      case 'Next month':
+        date.setMonth(date.getMonth() + 1);
+        date.setHours(9, 0, 0, 0);
+        break;
+    }
+    setSelectedDate(date);
+    setStep(3);
   };
 
-  const handleDateChange = (event, date) => {
-    setShowDatePicker(false);
-    if (date) {
-      setCustomDate(date);
-      setSelectedTime(date);
+  const handleCustomDateNext = () => {
+    Keyboard.dismiss();
+    if (!customDay || !customMonth || !customYear) {
+      Alert.alert('Error', 'Please enter day, month, and year');
+      return;
     }
+    
+    const date = new Date(parseInt(customYear), parseInt(customMonth) - 1, parseInt(customDay), 9, 0, 0, 0);
+    if (isNaN(date.getTime())) {
+      Alert.alert('Error', 'Invalid date');
+      return;
+    }
+    
+    setSelectedDate(date);
+    setStep(3);
   };
 
-  const handleSetReminder = async () => {
-    if (!selectedTime || !client?._id || !authToken) {
-      Alert.alert('Error', 'Please select a reminder time');
+  const handleSave = async () => {
+    Keyboard.dismiss();
+    if (!selectedDate || !selectedType || !client?._id || !authToken) {
+      Alert.alert('Error', 'Please complete all fields');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // Save to server (single source of truth)
       const response = await fetch(
         `https://signup.roostapp.io/admin/client/${client._id}/reminders`,
         {
@@ -69,108 +95,187 @@ const ReminderModal = ({ visible, onClose, client }) => {
             'Authorization': `Bearer ${authToken}`,
           },
           body: JSON.stringify({
-            date: selectedTime.toISOString(),
-            comment: `Follow up with ${client.firstName || client.name || 'client'}`,
+            date: selectedDate.toISOString(),
+            comment: comment || selectedType,
+            type: selectedType,
           }),
         }
       );
 
       if (response.ok) {
+        console.log('✅ Reminder saved to server');
         Alert.alert('Success', 'Reminder set successfully');
-        setSelectedTime(null);
-        onClose();
+        handleClose();
+        // Let the parent screen handle syncing when it becomes focused
       } else {
         const errorData = await response.json();
         Alert.alert('Error', errorData.error || 'Failed to set reminder');
       }
     } catch (error) {
-      console.error('Error setting reminder:', error);
+      console.error('❌ Error setting reminder:', error);
       Alert.alert('Error', 'Failed to set reminder');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleClose = () => {
+    Keyboard.dismiss();
+    setStep(1);
+    setSelectedDate(null);
+    setSelectedType(null);
+    setComment('');
+    setCustomDay('');
+    setCustomMonth('');
+    setCustomYear('');
+    onClose();
+  };
+
+  const renderDateStep = () => (
+    <View style={styles.modalContent}>
+      <Text style={styles.title}>Set reminder - Date</Text>
+
+      <View style={styles.optionsList}>
+        {dateOptions.map((option) => (
+          <TouchableOpacity
+            key={option}
+            style={[styles.option, selectedDate && option === 'Custom' && styles.optionSelected]}
+            onPress={() => handleDateSelect(option)}
+          >
+            <Text style={[styles.optionText, selectedDate && option === 'Custom' && styles.optionTextSelected]}>
+              {option}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.bottomButtons}>
+        <TouchableOpacity onPress={handleClose}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderCustomDateStep = () => (
+    <View style={styles.modalContent}>
+      <Text style={styles.title}>Set reminder</Text>
+
+      <View style={styles.customDateHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+        <View style={styles.customLabel}>
+          <Text style={styles.customLabelText}>Custom</Text>
+        </View>
+      </View>
+
+      <View style={styles.dateInputsRow}>
+        <TextInput
+          style={styles.dateInput}
+          placeholder="Day"
+          placeholderTextColor="#999"
+          keyboardType="number-pad"
+          maxLength={2}
+          value={customDay}
+          onChangeText={setCustomDay}
+        />
+        <TextInput
+          style={styles.dateInput}
+          placeholder="Month"
+          placeholderTextColor="#999"
+          keyboardType="number-pad"
+          maxLength={2}
+          value={customMonth}
+          onChangeText={setCustomMonth}
+        />
+        <TextInput
+          style={styles.dateInput}
+          placeholder="Year"
+          placeholderTextColor="#999"
+          keyboardType="number-pad"
+          maxLength={4}
+          value={customYear}
+          onChangeText={setCustomYear}
+        />
+      </View>
+
+      <View style={styles.bottomButtons}>
+        <TouchableOpacity onPress={handleClose}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.nextButton} onPress={handleCustomDateNext}>
+          <Text style={styles.nextButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderTypeStep = () => (
+    <View style={styles.modalContent}>
+      <Text style={styles.title}>Set reminder - Type</Text>
+
+      <View style={styles.optionsList}>
+        {typeOptions.map((option) => (
+          <TouchableOpacity
+            key={option}
+            style={[styles.option, selectedType === option && styles.optionSelected]}
+            onPress={() => setSelectedType(option)}
+          >
+            <Text style={[styles.optionText, selectedType === option && styles.optionTextSelected]}>
+              {option}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        
+        <TextInput
+          style={styles.commentInput}
+          placeholder="Add a comment here"
+          placeholderTextColor="#999"
+          multiline
+          numberOfLines={4}
+          value={comment}
+          onChangeText={setComment}
+        />
+      </View>
+
+      <View style={styles.bottomButtons}>
+        <TouchableOpacity onPress={handleClose}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.saveButton} 
+          onPress={handleSave}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      animationType="fade"
+      onRequestClose={handleClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.modalContainer}>
-          <TouchableOpacity activeOpacity={1}>
-            <View style={styles.modalContent}>
-              <View style={styles.header}>
-                <Text style={styles.title}>Set Reminder</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <Ionicons name="close" size={24} color={COLORS.slate} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.clientInfo}>
-                <Text style={styles.clientName}>
-                  {client.name || `${client.firstName || ''} ${client.lastName || ''}`.trim() || 'Client'}
-                </Text>
-              </View>
-
-              <View style={styles.optionsContainer}>
-                {quickOptions.map((option, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.option,
-                      (selectedTime && option.value !== 'custom' && option.value !== 'tomorrow9am') && styles.optionSelected,
-                    ]}
-                    onPress={() => handleOptionSelect(option)}
-                  >
-                    <Text style={styles.optionText}>{option.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {selectedTime && (
-                <View style={styles.selectedTimeContainer}>
-                  <Ionicons name="time" size={20} color={COLORS.green} />
-                  <Text style={styles.selectedTimeText}>
-                    {selectedTime.toLocaleString()}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.setButton,
-                  (!selectedTime || isSubmitting) && styles.setButtonDisabled,
-                ]}
-                onPress={handleSetReminder}
-                disabled={!selectedTime || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color={COLORS.white} />
-                ) : (
-                  <Text style={styles.setButtonText}>Set Reminder</Text>
-                )}
-              </TouchableOpacity>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={styles.modalContainer}>
+              {step === 1 && renderDateStep()}
+              {step === 2 && renderCustomDateStep()}
+              {step === 3 && renderTypeStep()}
             </View>
-          </TouchableOpacity>
+          </TouchableWithoutFeedback>
         </View>
-
-        {showDatePicker && (
-          <DateTimePicker
-            value={customDate}
-            mode="datetime"
-            display="default"
-            onChange={handleDateChange}
-            minimumDate={new Date()}
-          />
-        )}
-      </TouchableOpacity>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 };
@@ -178,95 +283,160 @@ const ReminderModal = ({ visible, onClose, client }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: COLORS.overlayDark,
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContainer: {
-    width: '100%',
+    width: '85%',
+    maxWidth: 400,
   },
   modalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 30,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.silver,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 24,
+    padding: 32,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.black,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#202020',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: 'futura',
   },
-  closeButton: {
-    padding: 4,
-  },
-  clientInfo: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  clientName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.black,
-  },
-  optionsContainer: {
-    paddingHorizontal: 20,
+  optionsList: {
+    marginBottom: 20,
   },
   option: {
-    padding: 16,
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
-    marginBottom: 10,
+    width: '100%',
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#377473',
     alignItems: 'center',
   },
   optionSelected: {
-    backgroundColor: COLORS.greenLight,
-    borderWidth: 2,
-    borderColor: COLORS.green,
+    backgroundColor: '#377473',
   },
   optionText: {
-    fontSize: 16,
-    color: COLORS.black,
-    fontWeight: '500',
-  },
-  selectedTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    marginHorizontal: 20,
-    marginTop: 10,
-    backgroundColor: COLORS.greenLight,
-    borderRadius: 8,
-  },
-  selectedTimeText: {
     fontSize: 14,
-    color: COLORS.green,
-    fontWeight: '600',
-    marginLeft: 8,
+    color: '#377473',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
-  setButton: {
-    backgroundColor: COLORS.green,
-    padding: 16,
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginTop: 20,
+  optionTextSelected: {
+    color: '#FFFFFF',
+  },
+  customDateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  backButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#377473',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
+  },
+  customLabel: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 32,
+    backgroundColor: '#377473',
+    marginLeft: 12,
     alignItems: 'center',
   },
-  setButtonDisabled: {
-    backgroundColor: COLORS.gray,
-    opacity: 0.6,
-  },
-  setButtonText: {
-    color: COLORS.white,
+  customLabelText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
+  },
+  dateInputsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  dateInput: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: '#FFFFFF',
+    fontSize: 16,
+    color: '#202020',
+    fontFamily: 'Futura Book',
+    textAlign: 'center',
+  },
+  commentInput: {
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    fontSize: 16,
+    color: '#202020',
+    fontFamily: 'Futura Book',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginTop: 4,
+  },
+  bottomButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  cancelText: {
+    fontSize: 18,
+    color: '#202020',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  nextButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  nextButtonText: {
+    fontSize: 16,
+    color: '#377473',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
+  },
+  saveButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    color: '#377473',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
   },
 });
 

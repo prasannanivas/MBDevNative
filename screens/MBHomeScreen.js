@@ -3,10 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
   Linking,
   Alert,
 } from 'react-native';
@@ -18,6 +19,10 @@ import { formatPhoneNumber } from '../utils/phoneFormatUtils';
 import { getRelativeTime } from '../utils/dateUtils';
 import ReminderModal from '../components/ReminderModal';
 import FilterModal from '../components/FilterModal';
+import Header from '../components/Header';
+import ClientCard from '../components/ClientCard';
+import CallButtonIcon from '../components/icons/CallButtonIcon';
+import AlertButtonIcon from '../components/icons/AlertButtonIcon';
 
 const MBHomeScreen = () => {
   const { broker, authToken } = useAuth();
@@ -25,7 +30,7 @@ const MBHomeScreen = () => {
   const [callRequests, setCallRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('Today');
+  const [selectedFilter, setSelectedFilter] = useState('All clients');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -49,14 +54,25 @@ const MBHomeScreen = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Extract clients from assignments and filter based on call schedule
+        // Debug logs: raw response and assignments
+        console.log('fetchCallRequests: raw response data:', data);
+        console.log('fetchCallRequests: assignments count:', (data.assignments || []).length);
+
+        // Extract clients from assignments and filter for active call requests
         // Filter out assignments with null clientId first
         const clients = (data.assignments || [])
           .filter(assignment => assignment.clientId != null)
           .map(assignment => {
             const client = assignment.clientId;
             const nameParts = (client.name || '').split(' ');
-            return {
+            
+            // Check if client has an active call request
+            const hasCallRequest = client.callSchedulePreference && 
+              client.callSchedulePreference.preferredDay && 
+              client.callSchedulePreference.preferredTime && 
+              !client.callSchedulePreference.hasCallCompleted;
+            
+            const mapped = {
               _id: client._id,
               name: client.name,
               email: client.email,
@@ -64,10 +80,15 @@ const MBHomeScreen = () => {
               type: client.type || 'client',
               firstName: nameParts[0] || '',
               lastName: nameParts.slice(1).join(' ') || '',
-              requestedAt: client.callScheduledAt || assignment.assignedAt,
-              priority: client.callScheduledAt ? 'high' : 'normal',
+              requestedAt: client.callSchedulePreference?.scheduledAt || assignment.assignedAt,
+              priority: client.status,
+              callSchedulePreference: client.callSchedulePreference,
+              hasCallRequest: hasCallRequest,
             };
-          });
+            return mapped;
+          })
+          // Only show clients who have active call requests
+          .filter(client => client.hasCallRequest);
         
         // Apply filter
         const now = new Date();
@@ -91,6 +112,11 @@ const MBHomeScreen = () => {
             return date >= startOfLastWeek && date < endOfLastWeek;
           });
         }
+
+        // Sort by most recent (upcoming) first
+        filtered = filtered.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+        
+        console.log(`fetchCallRequests: filtered call requests count for filter "${selectedFilter}":`, filtered.length);
         
         setCallRequests(filtered);
       }
@@ -146,103 +172,32 @@ const MBHomeScreen = () => {
     navigation.navigate('ClientDetails', { client });
   };
 
-  const handleFilterPress = () => {
-    setShowFilterModal(true);
-  };
-
   const renderCallRequestCard = ({ item }) => {
     const isPriority = item.priority === 'high';
     const isCalled = calledClients.has(item._id);
+    const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
+    const status = isPriority ? 'Priority' : 'Active';
 
     return (
-      <TouchableOpacity
-        style={[
-          styles.card,
-          isPriority && styles.priorityCard,
-        ]}
+      <ClientCard
+        clientName={clientName}
+        status={status}
+        showStatus={true}
+        showInitials={true}
         onPress={() => handleClientPress(item)}
-        activeOpacity={0.7}
       >
-        <View style={styles.cardContent}>
-          {/* Avatar and Client Info */}
-          <View style={styles.leftSection}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {item.firstName?.[0]}{item.lastName?.[0]}
-              </Text>
-            </View>
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>
-                {item.firstName} {item.lastName}
-              </Text>
-              <Text style={styles.clientDetail}>{getRelativeTime(item.requestedAt)}</Text>
-            </View>
-          </View>
+        {/* Call Button */}
+        <TouchableOpacity onPress={() => handleCall(item)}>
+          <CallButtonIcon />
+        </TouchableOpacity>
 
-          {/* Action Buttons */}
-          <View style={styles.rightSection}>
-            {/* Call Button */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.callButton, isCalled && styles.calledButton]}
-              onPress={() => handleCall(item)}
-            >
-              <Ionicons
-                name="call"
-                size={20}
-                color={isCalled ? COLORS.bluePressed : COLORS.white}
-              />
-            </TouchableOpacity>
-
-            {/* Reminder Button */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.reminderButton]}
-              onPress={() => handleReminder(item)}
-            >
-              <Ionicons name="notifications-outline" size={20} color={COLORS.white} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Status Badge */}
-        {item.status && (
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+        {/* Alert/Reminder Button */}
+        <TouchableOpacity onPress={() => handleReminder(item)}>
+          <AlertButtonIcon />
+        </TouchableOpacity>
+      </ClientCard>
     );
   };
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      {/* Broker Info */}
-      <View style={styles.brokerInfo}>
-        <View style={styles.brokerAvatar}>
-          <Ionicons name="person" size={24} color={COLORS.white} />
-        </View>
-        <View>
-          <Text style={styles.brokerName}>
-            {broker.name || 'Mortgage Broker'}
-          </Text>
-          <Text style={styles.brokerCompany}>
-            {broker.company?.city || broker.company?.address || 'Mortgage Broker'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Call Requested Label and Filter */}
-      <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={handleFilterPress}
-        >
-          <Text style={styles.filterButtonText}>{selectedFilter}</Text>
-          <Ionicons name="chevron-down" size={16} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -262,15 +217,27 @@ const MBHomeScreen = () => {
     );
   }
 
+  // Get the most recent call and remaining calls
+  const upcomingCall = callRequests.length > 0 ? callRequests[0] : null;
+  const remainingCalls = callRequests.slice(1);
+
+  // Format time slot from callSchedulePreference
+  const getTimeSlot = (call) => {
+    if (!call?.callSchedulePreference?.preferredTime) return '';
+    const time = call.callSchedulePreference.preferredTime;
+    // Convert 09:00 to 9:00-12:00 format (assuming 3 hour window)
+    const [hours, mins] = time.split(':');
+    const startHour = parseInt(hours);
+    const endHour = startHour + 3;
+    return `${startHour}:${mins}-${endHour}:${mins}`;
+  };
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={callRequests}
-        renderItem={renderCallRequestCard}
-        keyExtractor={(item) => item._id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmptyState}
-        contentContainerStyle={styles.listContent}
+      <Header />
+      
+      <ScrollView
+        style={styles.scrollView}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -278,7 +245,58 @@ const MBHomeScreen = () => {
             tintColor={COLORS.primary}
           />
         }
-      />
+      >
+        {/* Header */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
+        </View>
+
+        {callRequests.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <>
+            {/* Featured Upcoming Call */}
+            {upcomingCall && (
+              <View style={styles.featuredCallSection}>
+                <ClientCard
+                  clientName={`${upcomingCall.firstName || ''} ${upcomingCall.lastName || ''}`.trim()}
+                  status={upcomingCall.priority === 'high' ? 'Priority' : 'Active'}
+                  showStatus={true}
+                  showInitials={true}
+                  onPress={() => handleClientPress(upcomingCall)}
+                >
+                  <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
+                    <CallButtonIcon bgColor={"#2271B1"}  />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleReminder(upcomingCall)}>
+                    <AlertButtonIcon />
+                  </TouchableOpacity>
+                </ClientCard>
+              </View>
+            )}
+
+            {/* Time Slot and Filter Row */}
+            {upcomingCall && (
+              <View style={styles.timeFilterRow}>
+                <Text style={styles.timeSlot}>{getTimeSlot(upcomingCall)}</Text>
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={() => setShowFilterModal(true)}
+                >
+                  <Text style={styles.filterButtonText}>{selectedFilter}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Remaining Calls List */}
+            {remainingCalls.map((item) => (
+              <View key={item._id} style={styles.callItem}>
+                {renderCallRequestCard({ item })}
+              </View>
+            ))}
+          </>
+        )}
+      </ScrollView>
 
       {/* Filter Modal */}
       <FilterModal
@@ -311,69 +329,68 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  bellButton: {
+    padding: 8,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.background,
   },
-  listContent: {
-    flexGrow: 1,
+  scrollView: {
+    flex: 1,
   },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+  titleContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: COLORS.background,
   },
-  brokerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+  featuredCallSection: {
+    marginBottom: 16,
   },
-  brokerAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  brokerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
-  brokerCompany: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-  },
-  headerRow: {
+  timeFilterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  timeSlot: {
+    fontSize: 11,
+    fontFamily:"futura",
+    fontWeight: '700',
+    color: '#797979',
+    fontFamily: 'futura',
+  },
+  callItem: {
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.orange,
-    letterSpacing: 1,
+    color: "#797979",
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'futura',
+    paddingLeft: 4,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.blue,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#377473',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   filterButtonText: {
-    color: COLORS.white,
+    color: '#377473',
     fontSize: 14,
-    fontWeight: '600',
-    marginRight: 4,
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   card: {
     backgroundColor: COLORS.white,

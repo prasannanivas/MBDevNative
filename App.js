@@ -3,7 +3,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Text } from 'react-native';
 
 // Context Providers
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -14,9 +14,15 @@ import { ChatProvider } from './context/ChatContext';
 import LoginScreen from './screens/LoginScreen';
 import MainTabs from './navigation/MainTabs';
 import ClientDetailsScreen from './screens/ClientDetailsScreen';
+import ProfileScreen from './screens/ProfileScreen';
 
 // Utils
 import COLORS from './utils/colors';
+import { registerForPushNotificationsAsync, registerDeviceOnServer } from './services/NotificationService';
+
+// Set default font for all Text components
+Text.defaultProps = Text.defaultProps || {};
+Text.defaultProps.style = { fontFamily: 'futura' };
 
 const Stack = createNativeStackNavigator();
 
@@ -38,7 +44,32 @@ const LoadingScreen = () => (
 
 // App Navigator - handles authenticated vs unauthenticated routes
 const AppNavigator = () => {
-  const { broker, isLoading } = useAuth();
+  const { broker, isLoading, authToken } = useAuth();
+
+  // Initialize push notifications when broker logs in
+  useEffect(() => {
+    if (broker && authToken) {
+      initializeNotifications();
+    }
+  }, [broker, authToken]);
+
+  const initializeNotifications = async () => {
+    try {
+      console.log('🔔 Initializing push notifications for broker:', broker?._id);
+      const token = await registerForPushNotificationsAsync();
+      console.log('📱 Got push token:', token ? token.substring(0, 50) + '...' : 'null');
+      
+      if (token && broker._id) {
+        console.log('📤 Registering device on server...');
+        const result = await registerDeviceOnServer(broker._id, token, authToken);
+        console.log('✅ Device registration result:', result);
+      } else {
+        console.warn('⚠️ Missing token or broker ID:', { hasToken: !!token, brokerId: broker._id });
+      }
+    } catch (error) {
+      console.error('❌ Error initializing push notifications:', error);
+    }
+  };
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -73,6 +104,18 @@ const AppNavigator = () => {
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+            }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={{
+              presentation: 'modal',
+              animationTypeForReplace: 'push',
+              animation: 'slide_from_left',
+              headerShown: false,
+              gestureEnabled: true,
+              gestureDirection: 'horizontal',
             }}
           />
         </>

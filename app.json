@@ -14,6 +14,14 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "fonts": [
+      "./assets/fonts/Futura Light font.ttf",
+      "./assets/fonts/futura font.ttf", 
+      "./assets/fonts/Futura Medium Italic font.ttf",
+      "./assets/fonts/futura font.ttf",
+      "./assets/fonts/Futura Heavy font.ttf",
+      "./assets/fonts/Futura Extra Black font.ttf"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.roostapp.mortgagebroker"
@@ -27,6 +35,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "35c5cae2-b562-47bf-b26f-18fdf8efedf8"
+      }
     }
   }
 }

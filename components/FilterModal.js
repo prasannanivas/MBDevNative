@@ -14,6 +14,7 @@ const FilterModal = ({ visible, onClose, selectedFilter, onSelectFilter }) => {
 
   const handleFilterSelect = (filter) => {
     onSelectFilter(filter);
+    onClose();
   };
 
   return (
@@ -23,19 +24,10 @@ const FilterModal = ({ visible, onClose, selectedFilter, onSelectFilter }) => {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
+      <View style={styles.overlay}>
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Filter Call Requests</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={COLORS.slate} />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.title}>Which calls would you like to see</Text>
 
             <View style={styles.filterList}>
               {filters.map((filter) => (
@@ -55,15 +47,16 @@ const FilterModal = ({ visible, onClose, selectedFilter, onSelectFilter }) => {
                   >
                     {filter}
                   </Text>
-                  {selectedFilter === filter && (
-                    <Ionicons name="checkmark" size={20} color={COLORS.white} />
-                  )}
                 </TouchableOpacity>
               ))}
             </View>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };
@@ -71,7 +64,7 @@ const FilterModal = ({ visible, onClose, selectedFilter, onSelectFilter }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: COLORS.overlayDark,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -80,49 +73,57 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
   modalContent: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 24,
+    padding: 32,
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.silver,
   },
   title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.black,
-  },
-  closeButton: {
-    padding: 4,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#202020',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: 'Futura Book',
   },
   filterList: {
-    padding: 12,
+    width: '100%',
+    marginBottom: 20,
   },
   filterOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 32,
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#377473',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: COLORS.background,
   },
   filterOptionSelected: {
-    backgroundColor: COLORS.blue,
+    backgroundColor: '#377473',
+    borderColor: '#377473',
   },
   filterText: {
-    fontSize: 16,
-    color: COLORS.black,
-    fontWeight: '500',
+    fontSize: 18,
+    color: '#377473',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
   },
   filterTextSelected: {
-    color: COLORS.white,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  cancelButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+  },
+  cancelText: {
+    fontSize: 18,
+    color: '#202020',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
   },
 });
 

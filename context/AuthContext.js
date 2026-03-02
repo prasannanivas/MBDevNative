@@ -48,10 +48,13 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      console.log('=== LOGGING OUT ===');
       await AsyncStorage.removeItem('mortgageBroker');
       await AsyncStorage.removeItem('brokerAuthToken');
+      console.log('=== STORAGE CLEARED ===');
       setBroker(null);
       setAuthToken(null);
+      console.log('=== LOGOUT COMPLETE ===');
     } catch (error) {
       console.error('Error during logout:', error);
       throw error;

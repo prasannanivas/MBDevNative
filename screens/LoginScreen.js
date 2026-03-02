@@ -26,6 +26,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    console.log('=== STARTING LOGIN PROCESS ===');
     setIsLoading(true);
     try {
       const response = await fetch('https://signup.roostapp.io/admin/login', {
@@ -37,16 +38,57 @@ const LoginScreen = ({ navigation }) => {
       });
 
       const data = await response.json();
+      console.log('=== LOGIN RESPONSE ===', JSON.stringify(data.admin, null, 2));
 
       if (response.ok) {
         // Check if user is a sub-admin (mortgage broker)
         if (data.admin && data.admin.role === 'sub-admin') {
-          // Normalize admin object (backend uses 'id', app uses '_id')
-          const adminData = {
-            ...data.admin,
-            _id: data.admin.id || data.admin._id,
-          };
-          await login(adminData, data.accessToken);
+          // Fetch full broker profile to get all fields including profilePicture
+          try {
+            const brokerId = data.admin.id || data.admin._id;
+            const profileUrl = `https://signup.roostapp.io/admin/mortgage-broker/${brokerId}/profile`;
+            console.log('Fetching broker profile from:', profileUrl);
+            console.log('Using token:', data.accessToken);
+            
+            const profileResponse = await fetch(profileUrl, {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${data.accessToken}`,
+              },
+            });
+
+            console.log('Profile fetch response status:', profileResponse.status);
+            
+            if (profileResponse.ok) {
+              const profileData = await profileResponse.json();
+              console.log('=== FULL BROKER PROFILE ===', JSON.stringify(profileData.broker, null, 2));
+              
+              // Use full profile data with normalized _id
+              const fullBrokerData = {
+                ...profileData.broker,
+                _id: profileData.broker._id || profileData.broker.id,
+              };
+              await login(fullBrokerData, data.accessToken);
+            } else {
+              const errorText = await profileResponse.text();
+              console.error('Profile fetch failed:', profileResponse.status, errorText);
+              // Fallback to admin data from login if profile fetch fails
+              const adminData = {
+                ...data.admin,
+                _id: data.admin.id || data.admin._id,
+              };
+              await login(adminData, data.accessToken);
+            }
+          } catch (profileError) {
+            console.error('Error fetching broker profile:', profileError);
+            console.error('Profile error details:', profileError.message);
+            // Fallback to admin data from login
+            const adminData = {
+              ...data.admin,
+              _id: data.admin.id || data.admin._id,
+            };
+            await login(adminData, data.accessToken);
+          }
           // Navigation will be handled automatically by App.js
         } else {
           Alert.alert('Login Failed', 'This account is not a mortgage broker account');
@@ -140,11 +182,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.white,
     letterSpacing: 2,
+    fontFamily: 'futura',
   },
   subtitle: {
     fontSize: 16,
     color: COLORS.white,
     marginTop: 5,
+    fontFamily: 'futura',
   },
   formContainer: {
     backgroundColor: COLORS.white,
@@ -161,11 +205,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.black,
     marginBottom: 5,
+    fontFamily: 'futura',
   },
   description: {
     fontSize: 14,
     color: COLORS.slate,
     marginBottom: 25,
+    fontFamily: 'futura',
   },
   input: {
     backgroundColor: COLORS.background,
@@ -174,6 +220,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: COLORS.black,
+    fontFamily: 'futura',
   },
   loginButton: {
     backgroundColor: COLORS.primary,
@@ -189,6 +236,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: 'futura',
   },
   forgotPassword: {
     alignItems: 'center',
@@ -197,6 +245,7 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: COLORS.primary,
     fontSize: 14,
+    fontFamily: 'futura',
   },
 });
 

@@ -201,6 +201,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: COLORS.slate,
+    fontFamily: 'futura',
   },
   header: {
     backgroundColor: COLORS.white,
@@ -222,12 +223,14 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: COLORS.white,
+    fontFamily: 'futura',
   },
   clientName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.black,
     marginBottom: 8,
+    fontFamily: 'futura',
   },
   statusBadge: {
     backgroundColor: COLORS.greenLight,
@@ -239,6 +242,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.green,
+    fontFamily: 'futura',
   },
   actionsContainer: {
     flexDirection: 'row',
