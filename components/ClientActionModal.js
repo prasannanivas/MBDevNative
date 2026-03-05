@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,10 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
   const [conversation, setConversation] = useState(null);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
 
+  useEffect(() => {
+    console.log('State changed - showChatModal:', showChatModal, 'conversation:', conversation?._id || 'null');
+  }, [showChatModal, conversation]);
+
   const handleOpenChat = async () => {
     if (!client?._id) {
       console.log('No client ID available');
@@ -36,46 +40,65 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
     setIsLoadingChat(true);
     
     try {
-      // Try to get existing chat or create a new one
-      const url = `https://signup.roostapp.io/mortgage-broker/chat/get-or-create/${client._id}`;
-      console.log('Fetching chat from:', url);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+      // Fetch all chats (same way as MessagesScreen)
+      const response = await fetch(
+        `https://signup.roostapp.io/mortgage-broker/chats`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+        }
+      );
 
-      console.log('Chat response status:', response.status);
+      console.log('Chats response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Chat data received:', data);
+        console.log('Chats data received, count:', data.chats?.length);
         
-        // Structure conversation object for ChatModal
-        const nameParts = (client.name || '').split(' ');
-        const conversationData = {
-          _id: data.chat._id || data.chat.chatId,
-          participant: {
-            _id: client._id,
-            name: client.name,
-            email: client.email || '',
-            phone: client.phone || '',
-            type: client.type || 'client',
-            firstName: nameParts[0] || '',
-            lastName: nameParts.slice(1).join(' ') || '',
-          },
-        };
+        // Find chat with this client
+        const clientChat = (data.chats || []).find(chat => 
+          chat.participants?.client?._id === client._id
+        );
         
-        console.log('Opening chat modal with conversation:', conversationData);
-        setConversation(conversationData);
-        setShowChatModal(true);
+        if (clientChat) {
+          console.log('Found existing chat:', clientChat._id);
+          
+          // Structure conversation object exactly like MessagesScreen
+          const clientData = clientChat.participants.client;
+          const nameParts = (clientData.name || '').split(' ');
+          
+          const conversationData = {
+            _id: clientChat._id,
+            participant: {
+              _id: clientData._id,
+              name: clientData.name,
+              email: clientData.email,
+              phone: clientData.phone,
+              type: clientData.type || 'client',
+              firstName: nameParts[0] || '',
+              lastName: nameParts.slice(1).join(' ') || '',
+            },
+            lastMessage: clientChat.lastMessage?.content || '',
+            lastMessageAt: clientChat.lastMessage?.timestamp || clientChat.updatedAt,
+            unreadCount: clientChat.unreadCount?.mortgageBroker || 0,
+          };
+          
+          console.log('Opening chat modal with conversation:', conversationData._id);
+          setConversation(conversationData);
+          setShowChatModal(true);
+          console.log('Chat modal should now be visible');
+        } else {
+          console.log('No existing chat found, navigating to Messages');
+          // No existing chat found, fallback to navigate to Messages
+          Alert.alert('No Conversation', 'No existing conversation found with this client. Navigate to Messages to start a new conversation.');
+          if (onMessage) onMessage();
+        }
       } else {
         const errorText = await response.text();
-        console.error('Chat response error:', response.status, errorText);
-        Alert.alert('Error', 'Unable to open chat. Please try again.');
+        console.error('Chats response error:', response.status, errorText);
+        Alert.alert('Error', 'Unable to load chats. Please try again.');
       }
     } catch (error) {
       console.error('Error opening chat:', error);
@@ -96,7 +119,7 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
   return (
     <>
       <Modal
-        visible={visible}
+        visible={visible && !showChatModal}
         transparent={true}
         animationType="fade"
         onRequestClose={onClose}
@@ -170,6 +193,7 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
       </Modal>
 
       {/* Chat Modal */}
+      {console.log('Conversation state for ChatModal render:', conversation ? conversation._id : 'null', 'showChatModal:', showChatModal)}
       {conversation && (
         <ChatModal
           visible={showChatModal}

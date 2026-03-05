@@ -13,6 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import COLORS from '../utils/colors';
 import { formatTime } from '../utils/dateUtils';
@@ -204,17 +205,26 @@ const ChatModal = ({ visible, onClose, conversation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.white} />
-          </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.headerName}>
               {participant.firstName} {participant.lastName}
             </Text>
-            <Text style={styles.headerSubtitle}>
-              {participant.type === 'realtor' ? 'Realtor' : 'Client'}
-            </Text>
           </View>
+          
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Svg
+              width="26"
+              height="26"
+              viewBox="0 0 26 26"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <Path
+                d="M13 0C5.82075 0 0 5.8201 0 13C0 20.1799 5.8201 26 13 26C20.1799 26 26 20.1799 26 13C26 5.8201 20.1799 0 13 0ZM13 24.401C6.7275 24.401 1.625 19.2725 1.625 13C1.625 6.7275 6.7275 1.625 13 1.625C19.2725 1.625 24.375 6.7275 24.375 13C24.375 19.2725 19.2725 24.401 13 24.401ZM17.5961 8.4045C17.2793 8.08763 16.7648 8.08763 16.4473 8.4045L13.0007 11.8511L9.55402 8.4045C9.23715 8.08763 8.72202 8.08763 8.4045 8.4045C8.08698 8.72138 8.08763 9.2365 8.4045 9.55338L11.8511 13L8.4045 16.4466C8.08763 16.7635 8.08763 17.2786 8.4045 17.5955C8.72138 17.9124 9.2365 17.9124 9.55402 17.5955L13.0007 14.1489L16.4473 17.5955C16.7642 17.9124 17.2786 17.9124 17.5961 17.5955C17.9137 17.2786 17.913 16.7635 17.5961 16.4466L14.1495 13L17.5961 9.55338C17.914 9.23585 17.914 8.72138 17.5961 8.4045Z"
+                fill="#797979"
+              />
+            </Svg>
+          </TouchableOpacity>
         </View>
 
         {/* Messages List */}
@@ -236,29 +246,34 @@ const ChatModal = ({ visible, onClose, conversation }) => {
 
         {/* Input Area */}
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor={COLORS.gray}
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!messageText.trim() || isSending) && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSendMessage}
-            disabled={!messageText.trim() || isSending}
-          >
-            {isSending ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Ionicons name="send" size={20} color={COLORS.white} />
-            )}
-          </TouchableOpacity>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Type your message..."
+              placeholderTextColor="#797979"
+              value={messageText}
+              onChangeText={setMessageText}
+              multiline
+              maxLength={1000}
+              returnKeyType="send"
+              onSubmitEditing={handleSendMessage}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!messageText.trim() || isSending) && styles.sendButtonDisabled,
+              ]}
+              onPress={handleSendMessage}
+              disabled={!messageText.trim() || isSending}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color={COLORS.green} />
+              ) : (
+                <Ionicons name="send" size={20} color={COLORS.green} />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -274,9 +289,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#9BB9B9',
-    paddingTop: 50,
+    paddingTop: 63,
     paddingBottom: 15,
     paddingHorizontal: 16,
+    minHeight: 70,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -286,21 +302,24 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  backButton: {
-    marginRight: 12,
-  },
   headerInfo: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.white,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
+  closeButton: {
+    backgroundColor: '#F4F4F4',
+    position: 'absolute',
+    top: 60,
+    right: 16,
+    borderRadius: 53,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,
@@ -398,35 +417,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 12,
     backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.silver,
+    borderTopColor: '#E5E5E5',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#797979',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    minHeight: 56,
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#797979',
     maxHeight: 100,
-    marginRight: 8,
-    fontSize: 15,
-    color: COLORS.black,
+    paddingVertical: 8,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.green,
+    width: 26,
+    height: 26,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
   sendButtonDisabled: {
-    backgroundColor: COLORS.gray,
-    opacity: 0.5,
+    opacity: 0.3,
   },
 });
 
