@@ -3,11 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  SectionList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -16,6 +17,8 @@ import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import COLORS from '../utils/colors';
 import { scheduleReminderNotification, cancelReminderNotification } from '../services/NotificationService';
+import ClientActionModal from '../components/ClientActionModal';
+import ReminderModal from '../components/ReminderModal';
 
 const RemindersScreen = () => {
   const navigation = useNavigation();
@@ -23,6 +26,11 @@ const RemindersScreen = () => {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('Upcoming'); // 'Upcoming' or 'Past'
+  const [sections, setSections] = useState([]);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
 
   // Load reminders from local storage whenever screen is focused
   useFocusEffect(
@@ -67,7 +75,17 @@ const RemindersScreen = () => {
                   type: reminder.type,
                   clientId: client._id,
                   clientName: client.name || client.firstName || 'Client',
+                  clientPhone: client.phone,
                   createdAt: reminder.createdAt,
+                  // Store full client data for navigation
+                  clientData: {
+                    _id: client._id,
+                    name: client.name,
+                    email: client.email,
+                    phone: client.phone,
+                    type: client.type,
+                    status: client.status,
+                  },
                 });
               }
             });
@@ -137,6 +155,7 @@ const RemindersScreen = () => {
         
         const sortedReminders = [...upcomingReminders, ...pastReminders];
         setReminders(sortedReminders);
+        organizeSections(sortedReminders, selectedFilter);
         
         console.log('✅ Reminders synced and notifications scheduled');
       }
@@ -159,6 +178,74 @@ const RemindersScreen = () => {
   useEffect(() => {
     fetchAndCacheReminders();
   }, [broker, authToken]);
+
+  useEffect(() => {
+    organizeSections(reminders, selectedFilter);
+  }, [selectedFilter, reminders]);
+
+  const organizeSections = (remindersList, filter) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    // Filter based on selected filter
+    const filteredReminders = filter === 'Upcoming'
+      ? remindersList.filter(r => new Date(r.date) >= now)
+      : remindersList.filter(r => new Date(r.date) < now);
+
+    // Group reminders by time period
+    const grouped = {
+      today: [],
+      yesterday: [],
+      thisWeek: [],
+      older: [],
+    };
+
+    filteredReminders.forEach(reminder => {
+      const reminderDate = new Date(reminder.date);
+      const reminderDay = new Date(reminderDate.getFullYear(), reminderDate.getMonth(), reminderDate.getDate());
+
+      if (reminderDay.getTime() === today.getTime()) {
+        grouped.today.push(reminder);
+      } else if (reminderDay.getTime() === yesterday.getTime()) {
+        grouped.yesterday.push(reminder);
+      } else if (reminderDay >= weekStart) {
+        grouped.thisWeek.push(reminder);
+      } else {
+        grouped.older.push(reminder);
+      }
+    });
+
+    // Sort reminders within groups
+    const sortByDate = filter === 'Upcoming'
+      ? (a, b) => new Date(a.date) - new Date(b.date)
+      : (a, b) => new Date(b.date) - new Date(a.date);
+
+    grouped.today.sort(sortByDate);
+    grouped.yesterday.sort(sortByDate);
+    grouped.thisWeek.sort(sortByDate);
+    grouped.older.sort(sortByDate);
+
+    // Create sections array
+    const newSections = [];
+    if (grouped.today.length > 0) {
+      newSections.push({ title: 'TODAY', data: grouped.today });
+    }
+    if (grouped.yesterday.length > 0) {
+      newSections.push({ title: 'YESTERDAY', data: grouped.yesterday });
+    }
+    if (grouped.thisWeek.length > 0) {
+      newSections.push({ title: 'THIS WEEK', data: grouped.thisWeek });
+    }
+    if (grouped.older.length > 0) {
+      newSections.push({ title: filter === 'Upcoming' ? 'UPCOMING' : 'OLDER', data: grouped.older });
+    }
+
+    setSections(newSections);
+  };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -218,93 +305,117 @@ const RemindersScreen = () => {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = date - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Create date objects without time for comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const reminderDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffTime = reminderDay - today;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
+    if (diffDays === 0) return null; // Today - just show time
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    
+    // Format as "March 02 2025"
     const dateStr = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      month: 'long',
+      day: '2-digit',
+      year: 'numeric',
     });
+    
+    return dateStr;
+  };
 
+  const formatReminderDisplay = (reminder) => {
+    const date = new Date(reminder.date);
     const timeStr = date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
-
-    if (diffDays === 0) return `Today at ${timeStr}`;
-    if (diffDays === 1) return `Tomorrow at ${timeStr}`;
-    if (diffDays === -1) return `Yesterday at ${timeStr}`;
-    if (diffDays < -1) return `${dateStr} at ${timeStr}`;
     
-    return `${dateStr} at ${timeStr}`;
-  };
-
-  const isPastReminder = (dateString) => {
-    return new Date(dateString) < new Date();
+    const action = reminder.comment || reminder.type || 'Reminder';
+    const dateInfo = formatDate(reminder.date);
+    
+    return {
+      time: timeStr,
+      action: action,
+      dateInfo: dateInfo,
+    };
   };
 
   const handleClientPress = (reminder) => {
-    if (reminder.clientId) {
-      navigation.navigate('ClientDetails', { clientId: reminder.clientId });
+    setSelectedClient(reminder);
+    setShowActionModal(true);
+  };
+
+  const handleCall = async () => {
+    if (selectedClient?.clientPhone) {
+      setShowActionModal(false);
+      const phoneNumber = selectedClient.clientPhone.replace(/[^0-9]/g, '');
+      const url = `tel:${phoneNumber}`;
+      try {
+        await Linking.openURL(url);
+      } catch (error) {
+        console.error('Error making call:', error);
+        Alert.alert('Error', 'Could not initiate call');
+      }
+    } else {
+      setShowActionModal(false);
+      Alert.alert('No Phone Number', 'This client does not have a phone number on file.');
     }
+  };
+
+  const handleMessage = () => {
+    if (selectedClient?.clientId) {
+      setShowActionModal(false);
+      // Navigate to Messages or open chat
+      navigation.navigate('Messages');
+    }
+  };
+
+  const handleSetReminder = () => {
+    if (selectedClient?.clientData) {
+      setShowActionModal(false);
+      setShowReminderModal(true);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowActionModal(false);
+    setSelectedClient(null);
   };
 
   const handleDeleteReminder = (reminder) => {
     confirmDelete(reminder.id, reminder.clientName);
   };
 
-  const renderReminderCard = ({ item }) => {
-    const isPast = isPastReminder(item.date);
+  const renderSectionHeader = ({ section: { title } }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{title}</Text>
+    </View>
+  );
+
+  const renderReminderItem = ({ item }) => {
+    const display = formatReminderDisplay(item);
     
     return (
-      <View style={[styles.reminderItem, isPast && styles.pastReminderItem]}>
-        <View style={styles.cardWrapper}>
-          {/* Reminder Card */}
-          <TouchableOpacity 
-            style={styles.reminderCard}
-            onPress={() => handleClientPress(item)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardContainer}>
-              {/* Profile Initials */}
-              <View style={styles.profileIcon}>
-                <View style={styles.profileIconFrame}>
-                  <Text style={styles.initials}>
-                    {item.clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Content Section */}
-              <View style={styles.contentSection}>
-                {/* Client Name at Top */}
-                <Text style={styles.clientName} numberOfLines={1}>
-                  {item.clientName}
-                </Text>
-                
-                {/* Time */}
-                <Text style={styles.reminderTime}>
-                  {formatDate(item.date)}
-                </Text>
-                
-                {/* Comment below */}
-                <Text style={styles.reminderText} numberOfLines={2}>
-                  {item.comment || item.type || 'Reminder'}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-          
-          {/* Delete Button */}
-          <TouchableOpacity onPress={() => handleDeleteReminder(item)}>
-            <View style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-            </View>
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.reminderItem}
+        onPress={() => handleClientPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.reminderContent}>
+          <Text style={styles.clientName}>{item.clientName}</Text>
+          <View style={styles.reminderDetails}>
+            <Text style={styles.reminderTime}>{display.time}</Text>
+            <Text style={styles.reminderAction} numberOfLines={2}>
+              {display.action}
+              {display.dateInfo && ` - ${display.dateInfo}`}
+            </Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -318,16 +429,10 @@ const RemindersScreen = () => {
     </View>
   );
 
-  // Split reminders into featured (first upcoming) and remaining
-  const upcomingReminder = reminders.find(r => !isPastReminder(r.date));
-  const remainingReminders = upcomingReminder 
-    ? reminders.filter(r => r.id !== upcomingReminder.id)
-    : reminders;
-
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header sectionTitle="REMINDERS" />
+        <Header />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -337,10 +442,36 @@ const RemindersScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Header sectionTitle="REMINDERS" />
+      <Header />
       
-      <ScrollView
-        style={styles.scrollView}
+      {/* Filter Buttons */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterButton, selectedFilter === 'Upcoming' && styles.filterButtonActive]}
+          onPress={() => setSelectedFilter('Upcoming')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, selectedFilter === 'Upcoming' && styles.filterButtonTextActive]}>
+            Upcoming
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.filterButton, selectedFilter === 'Past' && styles.filterButtonActive]}
+          onPress={() => setSelectedFilter('Past')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, selectedFilter === 'Past' && styles.filterButtonTextActive]}>
+            Past
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderReminderItem}
+        renderSectionHeader={renderSectionHeader}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -348,70 +479,32 @@ const RemindersScreen = () => {
             tintColor={COLORS.primary}
           />
         }
-      >
-        {reminders.length === 0 ? (
-          renderEmptyState()
-        ) : (
-          <>
-            {/* Featured Upcoming Reminder */}
-            {upcomingReminder && (
-              <View style={styles.featuredReminderSection}>
-                <View style={styles.cardWrapper}>
-                  {/* Featured Reminder Card */}
-                  <TouchableOpacity 
-                    style={styles.reminderCard}
-                    onPress={() => handleClientPress(upcomingReminder)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.cardContainer}>
-                      {/* Profile Initials */}
-                      <View style={styles.profileIcon}>
-                        <View style={styles.profileIconFrame}>
-                          <Text style={styles.initials}>
-                            {upcomingReminder.clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                          </Text>
-                        </View>
-                      </View>
+        contentContainerStyle={styles.listContainer}
+        stickySectionHeadersEnabled={false}
+        ListEmptyComponent={renderEmptyState}
+      />
 
-                      {/* Content Section */}
-                      <View style={styles.contentSection}>
-                        {/* Client Name at Top */}
-                        <Text style={styles.clientName} numberOfLines={1}>
-                          {upcomingReminder.clientName}
-                        </Text>
-                        
-                        {/* Time */}
-                        <Text style={styles.reminderTime}>
-                          {formatDate(upcomingReminder.date)}
-                        </Text>
-                        
-                        {/* Comment below */}
-                        <Text style={styles.reminderText} numberOfLines={2}>
-                          {upcomingReminder.comment || upcomingReminder.type || 'Reminder'}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                  
-                  {/* Delete Button */}
-                  <TouchableOpacity onPress={() => handleDeleteReminder(upcomingReminder)}>
-                    <View style={styles.deleteButtonFeatured}>
-                      <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+      {/* Action Modal */}
+      <ClientActionModal
+        visible={showActionModal}
+        onClose={handleCloseModal}
+        clientName={selectedClient?.clientName}
+        client={selectedClient?.clientData}
+        authToken={authToken}
+        onCall={handleCall}
+        onMessage={handleMessage}
+        onSetReminder={handleSetReminder}
+      />
 
-            {/* Remaining Reminders List */}
-            {remainingReminders.map((item) => (
-              <View key={item.id} style={styles.reminderItem}>
-                {renderReminderCard({ item })}
-              </View>
-            ))}
-          </>
-        )}
-      </ScrollView>
+      {/* Reminder Modal */}
+      <ReminderModal
+        visible={showReminderModal}
+        onClose={() => {
+          setShowReminderModal(false);
+          fetchAndCacheReminders(); // Refresh to show new reminders
+        }}
+        client={selectedClient?.clientData}
+      />
     </View>
   );
 };
@@ -419,116 +512,97 @@ const RemindersScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#F5F5F5',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
   },
-  scrollView: {
-    flex: 1,
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 12,
   },
-  featuredReminderSection: {
-    marginTop: 16,
-    marginBottom: 8,
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#2E2E2E',
+    borderColor: '#2E2E2E',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666666',
+    fontFamily: 'futura',
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  listContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  sectionHeader: {
+    paddingVertical: 12,
+    paddingTop: 20,
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999999',
+    letterSpacing: 1,
+    fontFamily: 'futura',
   },
   reminderItem: {
-    marginVertical: 4,
-  },
-  pastReminderItem: {
-    opacity: 0.6,
-  },
-  cardWrapper: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    gap: 16,
-  },
-  reminderCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  cardContainer: {
+  reminderContent: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 16,
-  },
-  profileIcon: {
-    width: 49,
-    height: 49,
-    backgroundColor: '#4D4D4D',
-    borderRadius: 45,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileIconFrame: {
-    width: 49,
-    height: 49,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  initials: {
-    fontFamily: 'futura',
-    fontWeight: '700',
-    fontSize: 20,
-    lineHeight: 27,
-    color: '#FDFDFD',
-    textAlign: 'center',
-  },
-  contentSection: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    gap: 4,
   },
   clientName: {
-    fontFamily: 'futura',
-    fontWeight: '600',
     fontSize: 18,
+    fontWeight: '500',
     color: '#202020',
-    lineHeight: 24,
+    fontFamily: 'futura',
+    flex: 1,
+  },
+  reminderDetails: {
+    alignItems: 'flex-end',
+    marginLeft: 16,
+    maxWidth: '60%',
   },
   reminderTime: {
-    fontFamily: 'futura',
-    fontWeight: '500',
     fontSize: 12,
-    color: '#666666',
-    lineHeight: 16,
-  },
-  reminderText: {
-    fontFamily: 'futura',
     fontWeight: '400',
+    color: '#999999',
+    marginBottom: 4,
+    fontFamily: 'futura',
+  },
+  reminderAction: {
     fontSize: 14,
-    color: '#797979',
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  deleteButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFE8E6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteButtonFeatured: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFE8E6',
-    justifyContent: 'center',
-    alignItems: 'center',
+    fontWeight: '400',
+    color: '#666666',
+    fontFamily: 'futura',
+    textAlign: 'right',
   },
   emptyState: {
     flex: 1,
@@ -542,14 +616,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#202020',
     marginTop: 16,
-    fontFamily: 'Futura Book',
+    fontFamily: 'futura',
   },
   emptyStateSubtext: {
     fontSize: 16,
     color: '#666',
     marginTop: 8,
     textAlign: 'center',
-    fontFamily: 'Futura Book',
+    fontFamily: 'futura',
   },
 });
 

@@ -182,8 +182,9 @@ const MBHomeScreen = () => {
       <ClientCard
         clientName={clientName}
         status={status}
-        showStatus={true}
+        showStatus={false}
         showInitials={true}
+        timeRange={getCallTimeDisplay(item)}
         onPress={() => handleClientPress(item)}
       >
         {/* Call Button */}
@@ -218,8 +219,20 @@ const MBHomeScreen = () => {
   }
 
   // Get the most recent call and remaining calls
-  const upcomingCall = callRequests.length > 0 ? callRequests[0] : null;
-  const remainingCalls = callRequests.slice(1);
+  // Check if the first call is in the future for featuring
+  const isFutureCall = (call) => {
+    if (!call?.callSchedulePreference?.preferredDay) return true;
+    const callDate = new Date(call.callSchedulePreference.preferredDay);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    callDate.setHours(0, 0, 0, 0);
+    return callDate >= today;
+  };
+
+  // Only feature the first call if it's in the future
+  const upcomingCall = (callRequests.length > 0 && isFutureCall(callRequests[0])) ? callRequests[0] : null;
+  // Remaining calls include all but the featured one (if featured)
+  const remainingCalls = upcomingCall ? callRequests.slice(1) : callRequests;
 
   // Format time slot from callSchedulePreference
   const getTimeSlot = (call) => {
@@ -230,6 +243,40 @@ const MBHomeScreen = () => {
     const startHour = parseInt(hours);
     const endHour = startHour + 3;
     return `${startHour}:${mins}-${endHour}:${mins}`;
+  };
+
+  // Calculate time left or date to display
+  const getCallTimeDisplay = (call) => {
+    if (!call?.callSchedulePreference?.preferredDay) {
+      console.log('No preferredDay found for call:', call?.name);
+      return 'Call scheduled';
+    }
+    
+    const callDate = new Date(call.callSchedulePreference.preferredDay);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    callDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = callDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    console.log('Call date:', callDate, 'Today:', today, 'Diff days:', diffDays);
+    
+    if (diffDays === 0) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Tomorrow';
+    } else if (diffDays === 2) {
+      return '2 days left';
+    } else if (diffDays === 3) {
+      return '3 days left';
+    } else if (diffDays > 0 && diffDays <= 3) {
+      return `${diffDays} days left`;
+    } else {
+      // Format as "Mar 10, 2026"
+      const options = { month: 'short', day: 'numeric', year: 'numeric' };
+      return callDate.toLocaleDateString('en-US', options);
+    }
   };
 
   return (
@@ -247,22 +294,22 @@ const MBHomeScreen = () => {
         }
       >
         {/* Header */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
-        </View>
+    
 
-        {callRequests.length === 0 ? (
-          renderEmptyState()
-        ) : (
+        { 
           <>
             {/* Featured Upcoming Call */}
-            {upcomingCall && (
+            {upcomingCall && (<>
+                  <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
+        </View>
               <View style={styles.featuredCallSection}>
                 <ClientCard
                   clientName={`${upcomingCall.firstName || ''} ${upcomingCall.lastName || ''}`.trim()}
                   status={upcomingCall.priority === 'high' ? 'Priority' : 'Active'}
-                  showStatus={true}
+                  showStatus={false}
                   showInitials={true}
+                  timeRange={getCallTimeDisplay(upcomingCall)}
                   onPress={() => handleClientPress(upcomingCall)}
                 >
                   <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
@@ -272,13 +319,13 @@ const MBHomeScreen = () => {
                     <AlertButtonIcon />
                   </TouchableOpacity>
                 </ClientCard>
-              </View>
+              </View></>
             )}
 
             {/* Time Slot and Filter Row */}
-            {upcomingCall && (
+            { (
               <View style={styles.timeFilterRow}>
-                <Text style={styles.timeSlot}>{getTimeSlot(upcomingCall)}</Text>
+                <Text style={styles.timeSlot}>CALLS</Text>
                 <TouchableOpacity
                   style={styles.filterButton}
                   onPress={() => setShowFilterModal(true)}
@@ -295,7 +342,7 @@ const MBHomeScreen = () => {
               </View>
             ))}
           </>
-        )}
+        }
       </ScrollView>
 
       {/* Filter Modal */}
@@ -344,16 +391,19 @@ const styles = StyleSheet.create({
   titleContainer: {
     paddingHorizontal: 24,
     paddingVertical: 20,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#F0913A4D',
   },
   featuredCallSection: {
     marginBottom: 16,
+    backgroundColor: '#F0913A4D',
+    paddingBottom: 16,
   },
   timeFilterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
+    marginTop: 16,
     marginBottom: 16,
   },
   timeSlot: {

@@ -8,6 +8,8 @@ const ClientCard = ({
   showStatus = true,
   showInitials = true,
   lastMessage,
+  timeRange,
+  isUnread = false,
   onPress, 
   children 
 }) => {
@@ -40,12 +42,26 @@ const ClientCard = ({
           {/* Right Section */}
           <View style={[styles.rightSection, !showInitials && styles.rightSectionFullWidth]}>
             {/* Name */}
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={[styles.name, isUnread && styles.nameUnread]} numberOfLines={1}>
               {clientName || 'Client Name'}
             </Text>
             
-            {/* Conditional Content - Status or Last Message */}
-            {showStatus ? (
+            {/* Last Message - Show if exists and timeRange is defined (Messages screen) */}
+            {timeRange !== undefined && lastMessage && (
+              <Text style={[styles.lastMessage, isUnread && styles.lastMessageUnread]} numberOfLines={2}>
+                {lastMessage}
+              </Text>
+            )}
+            
+            {/* Time Range */}
+            {timeRange !== undefined && (
+              <Text style={styles.timeRange} numberOfLines={1}>
+                {timeRange || ''}
+              </Text>
+            )}
+            
+            {/* Conditional Content - Status or Last Message (for non-message screens) */}
+            {timeRange === undefined && showStatus ? (
               <View style={styles.statusFrame}>
                 {/* Status Bar */}
                 <View style={styles.clientStatus}>
@@ -57,19 +73,19 @@ const ClientCard = ({
                   {status}
                 </Text>
               </View>
-            ) : (
-              <Text style={styles.lastMessage} numberOfLines={2}>
+            ) : timeRange === undefined && (
+              <Text style={[styles.lastMessage, isUnread && styles.lastMessageUnread]} numberOfLines={2}>
                 {lastMessage || 'No messages yet...'}
               </Text>
             )}
           </View>
+          
+          {/* Action Buttons - Inside the card */}
+          <View style={styles.actionsContainer}>
+            {children}
+          </View>
         </View>
       </TouchableOpacity>
-      
-      {/* Action Buttons - Outside the card */}
-      <View style={styles.actionsContainer}>
-        {children}
-      </View>
     </View>
   );
 };
@@ -84,7 +100,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   clientCard: {
-    flex: 1,
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
@@ -136,6 +152,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#202020',
   },
+  nameUnread: {
+    fontWeight: '700',
+  },
+  timeRange: {
+    fontFamily: 'futura',
+    fontWeight: '400',
+    fontSize: 11,
+    color: '#797979',
+  },
   statusFrame: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -169,6 +194,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 10,
     color: '#797979',
+  },
+  lastMessageUnread: {
+    fontWeight: '700',
+    color: '#202020',
   },
   actionsContainer: {
     flexDirection: 'row',

@@ -5,12 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import MBHomeScreen from '../screens/MBHomeScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import RemindersScreen from '../screens/RemindersScreen';
+import ClientsScreen from '../screens/ClientsScreen';
 
 import COLORS from '../utils/colors';
 import { useChat } from '../context/ChatContext';
 import CallIcon from '../components/icons/CallIcon';
 import ChatIcon from '../components/icons/ChatIcon';
 import BellIcon from '../components/icons/BellIcon';
+import ClientsIcon from '../components/icons/ClientsIcon';
 
 const Tab = createBottomTabNavigator();
 
@@ -28,8 +30,8 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
   }, [state.index]);
 
   const translateX = animatedValue.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [-80, 0, 80], // -80 for first tab, 0 for center, 80 for third tab
+    inputRange: [0, 1, 2, 3],
+    outputRange: [-108, -36, 36, 108], // Properly aligned for 4 tabs (icon width 24 + gap 48 = 72 spacing)
   });
 
   return (
@@ -58,6 +60,8 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
             IconComponent = CallIcon;
           } else if (route.name === 'Messages') {
             IconComponent = ChatIcon;
+          } else if (route.name === 'Clients') {
+            IconComponent = ClientsIcon;
           } else if (route.name === 'Reminders') {
             IconComponent = BellIcon;
           }
@@ -104,6 +108,10 @@ const MainTabs = () => {
       <Tab.Screen 
         name="Messages" 
         component={MessagesScreen}
+      />
+      <Tab.Screen 
+        name="Clients" 
+        component={ClientsScreen}
       />
       <Tab.Screen 
         name="Reminders" 

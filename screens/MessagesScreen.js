@@ -129,29 +129,39 @@ const MessagesScreen = () => {
     const isUnread = item.unreadCount > 0;
     const participant = item.participant || {};
     const clientName = `${participant.firstName || ''} ${participant.lastName || ''}`.trim();
+    const timeDisplay = getRelativeTime(item.lastMessageAt);
 
     return (
-      <ClientCard
-        clientName={clientName}
-        showStatus={false}
-        showInitials={false}
-        lastMessage={item.lastMessage}
-        onPress={() => handleConversationPress(item)}
-      >
-        {/* Message Icon */}
-        <TouchableOpacity
+      <View style={styles.conversationWrapper}>
+        {/* Unread Dot Indicator */}
+        {isUnread && (
+          <View style={styles.unreadDot} />
+        )}
+        
+        <ClientCard
+          clientName={clientName}
+          showStatus={false}
+          showInitials={true}
+          lastMessage={item.lastMessage}
+          timeRange={timeDisplay}
+          isUnread={isUnread}
           onPress={() => handleConversationPress(item)}
         >
-          <MessageIcon width={43} height={43} />
-        </TouchableOpacity>
+          {/* Message Icon */}
+          <TouchableOpacity
+            onPress={() => handleConversationPress(item)}
+          >
+            <MessageIcon width={43} height={43} />
+          </TouchableOpacity>
 
-        {/* Alert Icon */}
-        <TouchableOpacity
-          onPress={() => {/* Handle notification */}}
-        >
-          <AlertIcon width={43} height={43} />
-        </TouchableOpacity>
-      </ClientCard>
+          {/* Alert Icon */}
+          <TouchableOpacity
+            onPress={() => {/* Handle notification */}}
+          >
+            <AlertIcon width={43} height={43} />
+          </TouchableOpacity>
+        </ClientCard>
+      </View>
     );
   };
 
@@ -389,6 +399,20 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     textAlign: 'center',
     marginTop: 8,
+  },
+  conversationWrapper: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    left: 16,
+    top: '50%',
+    marginTop: -4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#377473',
+    zIndex: 10,
   },
 });
 
