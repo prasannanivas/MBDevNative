@@ -28,6 +28,8 @@ const MBHomeScreen = () => {
   const { broker, authToken } = useAuth();
   const navigation = useNavigation();
   const [callRequests, setCallRequests] = useState([]);
+  const [realtorNewClients, setRealtorNewClients] = useState([]);
+  const [clientIntros, setClientIntros] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All clients');
@@ -54,13 +56,11 @@ const MBHomeScreen = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Debug logs: raw response and assignments
         console.log('fetchCallRequests: raw response data:', data);
         console.log('fetchCallRequests: assignments count:', (data.assignments || []).length);
 
-        // Extract clients from assignments and filter for active call requests
-        // Filter out assignments with null clientId first
-        const clients = (data.assignments || [])
+        // Extract all clients from assignments
+        const allClients = (data.assignments || [])
           .filter(assignment => assignment.clientId != null)
           .map(assignment => {
             const client = assignment.clientId;
@@ -84,41 +84,65 @@ const MBHomeScreen = () => {
               priority: client.status,
               callSchedulePreference: client.callSchedulePreference,
               hasCallRequest: hasCallRequest,
+              realtorInfo: client.realtorInfo || client.assignedRealtor,
+              isNewSignup: client.isNewSignup || false,
+              assignedAt: assignment.assignedAt,
             };
             return mapped;
-          })
-          // Only show clients who have active call requests
-          .filter(client => client.hasCallRequest);
+          });
         
-        // Apply filter
+        // Categorize clients into different call types
+        const callRequestClients = [];
+        const realtorClients = [];
+        const introClients = [];
+        
+        allClients.forEach(client => {
+          // Call Requested - clients with active call requests
+          if (client.hasCallRequest) {
+            callRequestClients.push(client);
+          }
+          // Realtor - new client - clients assigned to a realtor who signed up
+          else if (client.realtorInfo && client.realtorInfo.name && client.isNewSignup) {
+            realtorClients.push(client);
+          }
+          // Client intro - any new client signup
+          else if (client.isNewSignup) {
+            introClients.push(client);
+          }
+        });
+        
+        // Apply filter to all categories
         const now = new Date();
-        let filtered = clients;
-        
-        if (selectedFilter === 'Today') {
-          const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-          const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-          filtered = clients.filter(c => {
-            const date = new Date(c.requestedAt);
-            return date >= startOfDay && date <= endOfDay;
-          });
-        } else if (selectedFilter === 'This week') {
-          const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-          filtered = clients.filter(c => new Date(c.requestedAt) >= startOfWeek);
-        } else if (selectedFilter === 'Last week') {
-          const startOfLastWeek = new Date(now.setDate(now.getDate() - now.getDay() - 7));
-          const endOfLastWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-          filtered = clients.filter(c => {
-            const date = new Date(c.requestedAt);
-            return date >= startOfLastWeek && date < endOfLastWeek;
-          });
-        }
+        const applyFilter = (clients) => {
+          let filtered = clients;
+          
+          if (selectedFilter === 'Today') {
+            const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+            filtered = clients.filter(c => {
+              const date = new Date(c.requestedAt || c.assignedAt);
+              return date >= startOfDay && date <= endOfDay;
+            });
+          } else if (selectedFilter === 'This week') {
+            const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+            filtered = clients.filter(c => new Date(c.requestedAt || c.assignedAt) >= startOfWeek);
+          } else if (selectedFilter === 'Last week') {
+            const startOfLastWeek = new Date(now.setDate(now.getDate() - now.getDay() - 7));
+            const endOfLastWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+            filtered = clients.filter(c => {
+              const date = new Date(c.requestedAt || c.assignedAt);
+              return date >= startOfLastWeek && date < endOfLastWeek;
+            });
+          }
+          
+          return filtered.sort((a, b) => new Date(b.requestedAt || b.assignedAt) - new Date(a.requestedAt || a.assignedAt));
+        };
 
-        // Sort by most recent (upcoming) first
-        filtered = filtered.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+        setCallRequests(applyFilter(callRequestClients));
+        setRealtorNewClients(applyFilter(realtorClients));
+        setClientIntros(applyFilter(introClients));
         
-        console.log(`fetchCallRequests: filtered call requests count for filter "${selectedFilter}":`, filtered.length);
-        
-        setCallRequests(filtered);
+        console.log(`Categorized clients - Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}`);
       }
     } catch (error) {
       console.error('Error fetching call requests:', error);
@@ -202,11 +226,7 @@ const MBHomeScreen = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="call-outline" size={64} color={COLORS.gray} />
-      <Text style={styles.emptyStateText}>No call requests</Text>
-      <Text style={styles.emptyStateSubtext}>
-        Call requests will appear here when clients need to speak with you
-      </Text>
+      {/* Blank space when no actions */}
     </View>
   );
 
@@ -233,6 +253,13 @@ const MBHomeScreen = () => {
   const upcomingCall = (callRequests.length > 0 && isFutureCall(callRequests[0])) ? callRequests[0] : null;
   // Remaining calls include all but the featured one (if featured)
   const remainingCalls = upcomingCall ? callRequests.slice(1) : callRequests;
+  
+  // Featured calls for other sections
+  const upcomingRealtorCall = realtorNewClients.length > 0 ? realtorNewClients[0] : null;
+  const remainingRealtorCalls = upcomingRealtorCall ? realtorNewClients.slice(1) : realtorNewClients;
+  
+  const upcomingIntroCall = clientIntros.length > 0 ? clientIntros[0] : null;
+  const remainingIntroCalls = upcomingIntroCall ? clientIntros.slice(1) : clientIntros;
 
   // Format time slot from callSchedulePreference
   const getTimeSlot = (call) => {
@@ -293,56 +320,156 @@ const MBHomeScreen = () => {
           />
         }
       >
-        {/* Header */}
-    
-
-        { 
-          <>
-            {/* Featured Upcoming Call */}
-            {upcomingCall && (<>
-                  <View style={styles.titleContainer}>
+        {/* CALL REQUESTED SECTION */}
+        <View style={[styles.titleContainer, { backgroundColor: upcomingCall ? '#F0913A4D' : '#4CAF504D' }]}>
           <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
         </View>
-              <View style={styles.featuredCallSection}>
-                <ClientCard
-                  clientName={`${upcomingCall.firstName || ''} ${upcomingCall.lastName || ''}`.trim()}
-                  status={upcomingCall.priority === 'high' ? 'Priority' : 'Active'}
-                  showStatus={false}
-                  showInitials={true}
-                  timeRange={getCallTimeDisplay(upcomingCall)}
-                  onPress={() => handleClientPress(upcomingCall)}
-                >
-                  <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
-                    <CallButtonIcon bgColor={"#2271B1"}  />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleReminder(upcomingCall)}>
-                    <AlertButtonIcon />
-                  </TouchableOpacity>
-                </ClientCard>
-              </View></>
-            )}
+        
+        {upcomingCall ? (
+          <View style={[styles.featuredCallSection, { backgroundColor: '#F0913A4D' }]}>
+            <ClientCard
+              clientName={`${upcomingCall.firstName || ''} ${upcomingCall.lastName || ''}`.trim()}
+              status={upcomingCall.priority === 'high' ? 'Priority' : 'Active'}
+              showStatus={false}
+              showInitials={true}
+              timeRange={getCallTimeDisplay(upcomingCall)}
+              onPress={() => handleClientPress(upcomingCall)}
+            >
+              <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
+                <CallButtonIcon bgColor={"#2271B1"} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleReminder(upcomingCall)}>
+                <AlertButtonIcon />
+              </TouchableOpacity>
+            </ClientCard>
+          </View>
+        ) : (
+          <View style={[styles.emptyFeaturedSection, { backgroundColor: '#4CAF504D' }]}>
+            <View style={styles.emptyFeaturedCardInner}>
+              <Text style={styles.emptyFeaturedText}>You have no calls requested</Text>
+            </View>
+          </View>
+        )}
 
-            {/* Time Slot and Filter Row */}
-            { (
-              <View style={styles.timeFilterRow}>
-                <Text style={styles.timeSlot}>CALLS</Text>
-                <TouchableOpacity
-                  style={styles.filterButton}
-                  onPress={() => setShowFilterModal(true)}
-                >
-                  <Text style={styles.filterButtonText}>{selectedFilter}</Text>
+        <View style={styles.timeFilterRow}>
+          <Text style={styles.timeSlot}>CALLS</Text>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilterModal(true)}
+          >
+            <Text style={styles.filterButtonText}>{selectedFilter}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {remainingCalls.length > 0 ? (
+          remainingCalls.map((item) => (
+            <View key={item._id} style={styles.callItem}>
+              {renderCallRequestCard({ item })}
+            </View>
+          ))
+        ) : null}
+
+        {/* REALTOR - NEW CLIENT SECTION */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>REALTOR - NEW CLIENT</Text>
+        </View>
+        
+        {upcomingRealtorCall ? (
+          <View style={styles.featuredCallSection}>
+            <ClientCard
+              clientName={`${upcomingRealtorCall.firstName || ''} ${upcomingRealtorCall.lastName || ''}`.trim()}
+              status={`Realtor: ${upcomingRealtorCall.realtorInfo?.name || 'Unknown'}`}
+              showStatus={true}
+              showInitials={true}
+              timeRange={getCallTimeDisplay(upcomingRealtorCall)}
+              onPress={() => handleClientPress(upcomingRealtorCall)}
+            >
+              <TouchableOpacity onPress={() => handleCall(upcomingRealtorCall)}>
+                <CallButtonIcon bgColor={"#2271B1"} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleReminder(upcomingRealtorCall)}>
+                <AlertButtonIcon />
+              </TouchableOpacity>
+            </ClientCard>
+          </View>
+        ) : null}
+
+        {remainingRealtorCalls.length > 0 ? (
+          remainingRealtorCalls.map((item) => (
+            <View key={item._id} style={styles.callItem}>
+              <ClientCard
+                clientName={`${item.firstName || ''} ${item.lastName || ''}`.trim()}
+                status={`Realtor: ${item.realtorInfo?.name || 'Unknown'}`}
+                showStatus={true}
+                showInitials={true}
+                timeRange={getCallTimeDisplay(item)}
+                onPress={() => handleClientPress(item)}
+              >
+                <TouchableOpacity onPress={() => handleCall(item)}>
+                  <CallButtonIcon />
                 </TouchableOpacity>
-              </View>
-            )}
+                <TouchableOpacity onPress={() => handleReminder(item)}>
+                  <AlertButtonIcon />
+                </TouchableOpacity>
+              </ClientCard>
+            </View>
+          ))
+        ) : !upcomingRealtorCall ? (
+          <View style={styles.emptyFeaturedCard}>
+            <Text style={styles.emptyFeaturedText}>You have no realtor calls scheduled for {selectedFilter === 'All clients' ? 'today' : selectedFilter.toLowerCase()}</Text>
+          </View>
+        ) : null}
 
-            {/* Remaining Calls List */}
-            {remainingCalls.map((item) => (
-              <View key={item._id} style={styles.callItem}>
-                {renderCallRequestCard({ item })}
-              </View>
-            ))}
-          </>
-        }
+        {/* CLIENT INTRO SECTION */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>CLIENT INTRO</Text>
+        </View>
+        
+        {upcomingIntroCall ? (
+          <View style={styles.featuredCallSection}>
+            <ClientCard
+              clientName={`${upcomingIntroCall.firstName || ''} ${upcomingIntroCall.lastName || ''}`.trim()}
+              status="New Client"
+              showStatus={false}
+              showInitials={true}
+              timeRange={getCallTimeDisplay(upcomingIntroCall)}
+              onPress={() => handleClientPress(upcomingIntroCall)}
+            >
+              <TouchableOpacity onPress={() => handleCall(upcomingIntroCall)}>
+                <CallButtonIcon bgColor={"#2271B1"} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleReminder(upcomingIntroCall)}>
+                <AlertButtonIcon />
+              </TouchableOpacity>
+            </ClientCard>
+          </View>
+        ) : null}
+
+        {remainingIntroCalls.length > 0 ? (
+          remainingIntroCalls.map((item) => (
+            <View key={item._id} style={styles.callItem}>
+              <ClientCard
+                clientName={`${item.firstName || ''} ${item.lastName || ''}`.trim()}
+                status="New Client"
+                showStatus={false}
+                showInitials={true}
+                timeRange={getCallTimeDisplay(item)}
+                onPress={() => handleClientPress(item)}
+              >
+                <TouchableOpacity onPress={() => handleCall(item)}>
+                  <CallButtonIcon />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleReminder(item)}>
+                  <AlertButtonIcon />
+                </TouchableOpacity>
+              </ClientCard>
+            </View>
+          ))
+        ) : !upcomingIntroCall ? (
+          <View style={styles.emptyFeaturedCard}>
+            <Text style={styles.emptyFeaturedText}>You have no client intro calls scheduled for {selectedFilter === 'All clients' ? 'today' : selectedFilter.toLowerCase()}</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Filter Modal */}
@@ -391,7 +518,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     paddingHorizontal: 24,
     paddingVertical: 20,
-    backgroundColor: '#F0913A4D',
+    // backgroundColor: '#F0913A4D',
   },
   featuredCallSection: {
     marginBottom: 16,
@@ -542,6 +669,53 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     textAlign: 'center',
     marginTop: 8,
+  },
+  emptyCallsSection: {
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  emptyCallsText: {
+    fontSize: 14,
+    color: COLORS.gray,
+    textAlign: 'center',
+  },
+  emptyFeaturedSection: {
+    paddingHorizontal: 24,
+    paddingTop: 0,
+    paddingBottom: 16,
+  },
+  emptyFeaturedCard: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyFeaturedCardInner: {
+    backgroundColor: COLORS.white,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyFeaturedText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    fontFamily: 'futura',
   },
 });
 
