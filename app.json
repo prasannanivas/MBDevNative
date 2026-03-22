@@ -6,6 +6,17 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "description": "Roost Mortgage Broker - Connect with your clients seamlessly, manage call requests, schedule appointments, and communicate efficiently. The essential tool for mortgage brokers.",
+    "keywords": [
+      "mortgage broker",
+      "real estate",
+      "mortgage",
+      "client management",
+      "appointments",
+      "communication"
+    ],
+    "category": "BUSINESS",
+    "privacy": "https://roostapp.io/privacy",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -16,7 +27,7 @@
     ],
     "fonts": [
       "./assets/fonts/Futura Light font.ttf",
-      "./assets/fonts/futura font.ttf", 
+      "./assets/fonts/futura font.ttf",
       "./assets/fonts/Futura Medium Italic font.ttf",
       "./assets/fonts/futura font.ttf",
       "./assets/fonts/Futura Heavy font.ttf",
@@ -24,21 +35,49 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.roostapp.mortgagebroker"
+      "bundleIdentifier": "com.roostapp.mortgagebroker",
+      "buildNumber": "1",
+      "icon": "./assets/icon.png",
+      "splash": {
+        "backgroundColor": "#CB003F"
+      },
+      "infoPlist": {
+        "UILaunchScreen": {
+          "UIColorName": "SplashScreenBackground",
+          "UIImageName": "SplashScreen"
+        },
+        "UIUserInterfaceStyle": "Light",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Roost Mortgage Broker needs camera access to allow you to take photos of documents for client verification.",
+        "NSPhotoLibraryUsageDescription": "Roost Mortgage Broker needs photo library access to allow you to select and upload documents.",
+        "NSContactsUsageDescription": "Roost Mortgage Broker needs contacts access to help you connect with your clients more easily.",
+        "NSUserNotificationsUsageDescription": "Roost Mortgage Broker sends notifications to keep you updated on client requests, messages, and appointment reminders.",
+        "NSFaceIDUsageDescription": "Roost Mortgage Broker uses Face ID to let you log in quickly and securely without entering your password."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#CB003F"
       },
-      "package": "com.roostapp.mortgagebroker"
+      "package": "com.roostapp.mortgagebroker",
+      "versionCode": 1,
+      "splash": {
+        "backgroundColor": "#CB003F"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "35c5cae2-b562-47bf-b26f-18fdf8efedf8"
+        "projectId": "37ddce58-60ea-4494-96fd-70e02817c906"
       }
     }
   }
