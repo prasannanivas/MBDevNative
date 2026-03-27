@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import Header from '../components/Header';
 import ClientActionModal from '../components/ClientActionModal';
@@ -34,7 +35,7 @@ const ClientsScreen = () => {
   const fetchClients = async () => {
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/admin/broker-clients/${broker._id}?includeNeededDocs=false`,
+        `${API_BASE_URL}/admin/broker-clients/${broker._id}?includeNeededDocs=false`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -118,6 +119,20 @@ const ClientsScreen = () => {
       const url = `tel:${phoneNumber}`;
       try {
         await Linking.openURL(url);
+        
+        // Send notification to client
+        if (selectedClient?._id) {
+          await fetch(
+            `${API_BASE_URL}/admin/client/${selectedClient._id}/broker-call-notification`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            }
+          );
+        }
       } catch (error) {
         console.error('Error making call:', error);
       }

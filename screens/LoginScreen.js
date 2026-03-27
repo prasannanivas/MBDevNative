@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import COLORS from '../utils/colors';
+import API_BASE_URL from '../config/api';
 import Logo from '../components/Logo';
 import { StatusBar } from 'expo-status-bar';
 
@@ -61,7 +62,7 @@ const LoginScreen = ({ navigation }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('https://signup.roostapp.io/admin/login', {
+      const response = await fetch(`${API_BASE_URL}/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +79,7 @@ const LoginScreen = ({ navigation }) => {
           // Fetch full broker profile to get all fields including profilePicture
           try {
             const brokerId = data.admin.id || data.admin._id;
-            const profileUrl = `https://signup.roostapp.io/admin/mortgage-broker/${brokerId}/profile`;
+            const profileUrl = `${API_BASE_URL}/admin/mortgage-broker/${brokerId}/profile`;
             console.log('Fetching broker profile from:', profileUrl);
             console.log('Using token:', data.accessToken);
             

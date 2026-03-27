@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import { getRelativeTime } from '../utils/dateUtils';
 import MessageFilterModal from '../components/MessageFilterModal';
@@ -43,7 +44,7 @@ const MessagesScreen = () => {
   const fetchConversations = async () => {
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/mortgage-broker/chats`,
+        `${API_BASE_URL}/mortgage-broker/chats`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -130,6 +131,7 @@ const MessagesScreen = () => {
     const participant = item.participant || {};
     const clientName = `${participant.firstName || ''} ${participant.lastName || ''}`.trim();
     const timeDisplay = getRelativeTime(item.lastMessageAt);
+    const isInactive = participant.mbActivityStatus === 'Inactive';
 
     return (
       <View style={styles.conversationWrapper}>
@@ -145,6 +147,7 @@ const MessagesScreen = () => {
           lastMessage={item.lastMessage}
           timeRange={timeDisplay}
           isUnread={isUnread}
+          isInactive={isInactive}
           onPress={() => handleConversationPress(item)}
         >
           {/* Message Icon */}

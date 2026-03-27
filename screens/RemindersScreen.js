@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import Header from '../components/Header';
 import COLORS from '../utils/colors';
 import { scheduleReminderNotification, cancelReminderNotification } from '../services/NotificationService';
@@ -45,12 +46,14 @@ const RemindersScreen = () => {
     try {
       console.log('📋 Fetching reminders from server for broker:', broker._id);
       
-      // Fetch from server (single source of truth)
+      // Fetch from server (single source of truth) with cache busting
+      const timestamp = new Date().getTime();
       const response = await fetch(
-        `https://signup.roostapp.io/admin/broker-clients/${broker._id}`,
+        `${API_BASE_URL}/admin/broker-clients/${broker._id}?t=${timestamp}`,
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
+            'Cache-Control': 'no-cache',
           },
         }
       );
@@ -85,6 +88,7 @@ const RemindersScreen = () => {
                     phone: client.phone,
                     type: client.type,
                     status: client.status,
+                    mbActivityStatus: client.mbActivityStatus,
                   },
                 });
               }
@@ -259,7 +263,7 @@ const RemindersScreen = () => {
       if (!reminder) return;
       
       const response = await fetch(
-        `https://signup.roostapp.io/admin/client/${reminder.clientId}/reminders/${reminderId}`,
+        `${API_BASE_URL}/admin/client/${reminder.clientId}/reminders/${reminderId}`,
         {
           method: 'DELETE',
           headers: {
@@ -356,6 +360,20 @@ const RemindersScreen = () => {
       const url = `tel:${phoneNumber}`;
       try {
         await Linking.openURL(url);
+        
+        // Send notification to client
+        if (selectedClient?.clientId) {
+          await fetch(
+            `${API_BASE_URL}/admin/client/${selectedClient.clientId}/broker-call-notification`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            }
+          );
+        }
       } catch (error) {
         console.error('Error making call:', error);
         Alert.alert('Error', 'Could not initiate call');
@@ -398,18 +416,22 @@ const RemindersScreen = () => {
 
   const renderReminderItem = ({ item }) => {
     const display = formatReminderDisplay(item);
+    const isInactive = item.clientData?.mbActivityStatus === 'Inactive';
     
     return (
       <TouchableOpacity
-        style={styles.reminderItem}
+        style={[styles.reminderItem, isInactive && styles.reminderItemInactive]}
         onPress={() => handleClientPress(item)}
         activeOpacity={0.7}
       >
         <View style={styles.reminderContent}>
-          <Text style={styles.clientName}>{item.clientName}</Text>
+          <Text style={[styles.clientName, isInactive && styles.clientNameInactive]}>
+            {item.clientName}
+            {isInactive && <Text style={styles.inactiveLabel}> (Inactive)</Text>}
+          </Text>
           <View style={styles.reminderDetails}>
-            <Text style={styles.reminderTime}>{display.time}</Text>
-            <Text style={styles.reminderAction} numberOfLines={2}>
+            <Text style={[styles.reminderTime, isInactive && styles.reminderTimeInactive]}>{display.time}</Text>
+            <Text style={[styles.reminderAction, isInactive && styles.reminderActionInactive]} numberOfLines={2}>
               {display.action}
               {display.dateInfo && ` - ${display.dateInfo}`}
             </Text>
@@ -624,6 +646,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     fontFamily: 'futura',
+  },
+  reminderItemInactive: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.7,
+  },
+  clientNameInactive: {
+    color: '#999999',
+  },
+  inactiveLabel: {
+    fontSize: 14,
+    color: '#999999',
+    fontStyle: 'italic',
+  },
+  reminderTimeInactive: {
+    color: '#CCCCCC',
+  },
+  reminderActionInactive: {
+    color: '#AAAAAA',
   },
 });
 

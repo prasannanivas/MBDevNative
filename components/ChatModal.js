@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import { formatTime } from '../utils/dateUtils';
 
@@ -38,7 +39,7 @@ const ChatModal = ({ visible, onClose, conversation }) => {
     
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/mortgage-broker/chat/${conversation._id}/messages`,
+        `${API_BASE_URL}/mortgage-broker/chat/${conversation._id}/messages`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ const ChatModal = ({ visible, onClose, conversation }) => {
     
     try {
       await fetch(
-        `https://signup.roostapp.io/mortgage-broker/chat/${conversation._id}/read`,
+        `${API_BASE_URL}/mortgage-broker/chat/${conversation._id}/read`,
         {
           method: 'POST',
           headers: {
@@ -97,7 +98,7 @@ const ChatModal = ({ visible, onClose, conversation }) => {
 
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/mortgage-broker/chat/${conversation._id}/messages`,
+        `${API_BASE_URL}/mortgage-broker/chat/${conversation._id}/messages`,
         {
           method: 'POST',
           headers: {
@@ -177,7 +178,7 @@ const ChatModal = ({ visible, onClose, conversation }) => {
           <View style={styles.brokerAvatar}>
             {broker.profilePicture ? (
               <Image
-                source={{ uri: `https://signup.roostapp.io/admin/profile-picture/${broker.profilePicture}` }}
+                source={{ uri: `${API_BASE_URL}/admin/profile-picture/${broker.profilePicture}` }}
                 style={styles.avatarImage}
                 resizeMode="cover"
               />

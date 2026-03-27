@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import API_BASE_URL from '../config/api';
 import CallIcon from './icons/CallIcon';
 import ChatIcon from './icons/ChatIcon';
 import BellIcon from './icons/BellIcon';
@@ -42,7 +43,7 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
     try {
       // Fetch all chats (same way as MessagesScreen)
       const response = await fetch(
-        `https://signup.roostapp.io/mortgage-broker/chats`,
+        `${API_BASE_URL}/mortgage-broker/chats`,
         {
           headers: {
             'Content-Type': 'application/json',

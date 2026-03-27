@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import API_BASE_URL from '../config/api';
 
 const ChatContext = createContext();
 
@@ -14,7 +15,7 @@ export const ChatProvider = ({ children }) => {
 
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/mortgage-broker/unread-count`,
+        `${API_BASE_URL}/mortgage-broker/unread-count`,
         {
           headers: {
             'Content-Type': 'application/json',

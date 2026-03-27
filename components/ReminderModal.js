@@ -11,16 +11,19 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 
-const ReminderModal = ({ visible, onClose, client }) => {
+const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
   const { broker, authToken } = useAuth();
-  const [step, setStep] = useState(1); // 1: Date, 2: Custom Date, 3: Type
+  const [step, setStep] = useState(1); // 1: Date, 2: Custom Date, 3: Type, 4: Inactive Confirmation
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inactiveComment, setInactiveComment] = useState('');
   
   // Custom date inputs
   const [customDay, setCustomDay] = useState('');
@@ -87,7 +90,7 @@ const ReminderModal = ({ visible, onClose, client }) => {
     try {
       // Save to server (single source of truth)
       const response = await fetch(
-        `https://signup.roostapp.io/admin/client/${client._id}/reminders`,
+        `${API_BASE_URL}/admin/client/${client._id}/reminders`,
         {
           method: 'POST',
           headers: {
@@ -105,6 +108,7 @@ const ReminderModal = ({ visible, onClose, client }) => {
       if (response.ok) {
         console.log('✅ Reminder saved to server');
         Alert.alert('Success', 'Reminder set successfully');
+        if (onSuccess) onSuccess(); // Trigger refresh
         handleClose();
         // Let the parent screen handle syncing when it becomes focused
       } else {
@@ -128,10 +132,78 @@ const ReminderModal = ({ visible, onClose, client }) => {
     setCustomDay('');
     setCustomMonth('');
     setCustomYear('');
+    setInactiveComment('');
     onClose();
   };
 
-  const renderDateStep = () => (
+  const handleInactiveClick = () => {
+    console.log('🔴 [ReminderModal] Inactive/Active toggle button clicked');
+    console.log('🔴 [ReminderModal] Client:', client);
+    console.log('🔴 [ReminderModal] Current status:', client?.mbActivityStatus);
+    Keyboard.dismiss();
+    setStep(4);
+  };
+
+  const handleToggleInactive = async () => {
+    console.log('🔴 [ReminderModal] handleToggleInactive called');
+    console.log('🔴 [ReminderModal] Client ID:', client?._id);
+    console.log('🔴 [ReminderModal] Inactive comment:', inactiveComment);
+    console.log('🔴 [ReminderModal] API_BASE_URL:', API_BASE_URL);
+    Keyboard.dismiss();
+    if (!client?._id || !authToken) {
+      console.log('❌ [ReminderModal] Missing client ID or auth token');
+      Alert.alert('Error', 'Client information not available');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      console.log('🔴 [ReminderModal] Making API call to toggle inactive...');
+      const response = await fetch(
+        `${API_BASE_URL}/admin/client/${client._id}/toggle-inactive`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            comment: inactiveComment,
+          }),
+        }
+      );
+      console.log('🔴 [ReminderModal] Response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [ReminderModal] Toggle inactive successful:', data);
+        
+        // Clear AsyncStorage cache to force fresh fetch
+        const storageKey = `reminders_${broker._id}`;
+        await AsyncStorage.removeItem(storageKey);
+        console.log('🗑️ Cleared reminders cache after status toggle');
+        
+        Alert.alert('Success', data.message || 'Client status updated');
+        console.log('🔄 [ReminderModal] Calling onSuccess to refresh data');
+        if (onSuccess) onSuccess(); // Trigger refresh
+        handleClose();
+      } else {
+        const errorData = await response.json();
+        console.log('❌ [ReminderModal] Toggle inactive failed:', errorData);
+        Alert.alert('Error', errorData.error || 'Failed to update client status');
+      }
+    } catch (error) {
+      console.error('❌ Error toggling inactive status:', error);
+      Alert.alert('Error', 'Failed to update client status');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderDateStep = () => {
+    const isInactive = client?.mbActivityStatus === 'Inactive';
+    
+    return (
     <View style={styles.modalContent}>
       <Text style={styles.title}>Set reminder - Date</Text>
 
@@ -149,13 +221,23 @@ const ReminderModal = ({ visible, onClose, client }) => {
         ))}
       </View>
 
+      <TouchableOpacity 
+        style={[styles.inactiveButton, isInactive && styles.activeButton]} 
+        onPress={handleInactiveClick}
+      >
+        <Text style={styles.inactiveButtonText}>
+          {isInactive ? 'Make Active' : 'Set as Inactive'}
+        </Text>
+      </TouchableOpacity>
+
       <View style={styles.bottomButtons}>
         <TouchableOpacity onPress={handleClose}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </View>
-  );
+  );};
+
 
   const renderCustomDateStep = () => (
     <View style={styles.modalContent}>
@@ -258,6 +340,46 @@ const ReminderModal = ({ visible, onClose, client }) => {
     </View>
   );
 
+  const renderInactiveConfirmation = () => {
+    const isCurrentlyInactive = client?.mbActivityStatus === 'Inactive';
+    const newStatus = isCurrentlyInactive ? 'active' : 'inactive';
+    
+    return (
+    <View style={styles.modalContent}>
+      <Text style={styles.confirmTitle}>Are you sure you want to set</Text>
+      <Text style={styles.clientName}>{client?.name || `${client?.firstName} ${client?.lastName}` || 'this client'}</Text>
+      <Text style={styles.confirmSubtext}>to {newStatus}?</Text>
+
+      <TextInput
+        style={styles.commentInput}
+        placeholder={isCurrentlyInactive ? "Add a comment (optional)" : "Add a comment here"}
+        placeholderTextColor="#999"
+        multiline
+        numberOfLines={4}
+        value={inactiveComment}
+        onChangeText={setInactiveComment}
+      />
+
+      <View style={styles.confirmButtons}>
+        <TouchableOpacity style={styles.cancelButtonConfirm} onPress={() => setStep(1)}>
+          <Text style={styles.cancelTextConfirm}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.confirmYesButton} 
+          onPress={handleToggleInactive}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.confirmYesText}>Yes</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );};
+
+
   return (
     <Modal
       visible={visible}
@@ -272,6 +394,7 @@ const ReminderModal = ({ visible, onClose, client }) => {
               {step === 1 && renderDateStep()}
               {step === 2 && renderCustomDateStep()}
               {step === 3 && renderTypeStep()}
+              {step === 4 && renderInactiveConfirmation()}
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -437,6 +560,81 @@ const styles = StyleSheet.create({
     color: '#377473',
     fontWeight: '600',
     fontFamily: 'Futura Book',
+  },
+  inactiveButton: {
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    backgroundColor: '#D2935A',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  inactiveButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontFamily: 'futura',
+  },
+  activeButton: {
+    backgroundColor: '#4CAF50', // Green for "Make Active"
+  },
+  confirmTitle: {
+    fontSize: 14,
+    color: '#202020',
+    textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: 'Futura Book',
+  },
+  clientName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#202020',
+    textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: 'futura',
+  },
+  confirmSubtext: {
+    fontSize: 14,
+    color: '#202020',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: 'Futura Book',
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    gap: 12,
+  },
+  cancelButtonConfirm: {
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  cancelTextConfirm: {
+    fontSize: 16,
+    color: '#377473',
+    fontWeight: '600',
+    fontFamily: 'Futura Book',
+  },
+  confirmYesButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 32,
+    backgroundColor: '#D2935A',
+    alignItems: 'center',
+  },
+  confirmYesText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
 });
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 
 const Header = ({ 
@@ -30,7 +31,7 @@ const Header = ({
                 >
                   {broker.profilePicture ? (
                     <Image
-                      source={{ uri: `https://signup.roostapp.io/admin/profile-picture/${broker.profilePicture}` }}
+                      source={{ uri: `${API_BASE_URL}/admin/profile-picture/${broker.profilePicture}` }}
                       style={styles.profileImage}
                       resizeMode="cover"
                     />

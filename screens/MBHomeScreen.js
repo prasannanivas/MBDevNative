@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import { formatPhoneNumber } from '../utils/phoneFormatUtils';
 import { getRelativeTime } from '../utils/dateUtils';
@@ -30,6 +31,7 @@ const MBHomeScreen = () => {
   const [callRequests, setCallRequests] = useState([]);
   const [realtorNewClients, setRealtorNewClients] = useState([]);
   const [clientIntros, setClientIntros] = useState([]);
+  const [recentDocuments, setRecentDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All clients');
@@ -43,9 +45,10 @@ const MBHomeScreen = () => {
   }, [selectedFilter]);
 
   const fetchCallRequests = async () => {
+    console.log('🔄 [MBHomeScreen] fetchCallRequests called');
     try {
       const response = await fetch(
-        `https://signup.roostapp.io/admin/broker-clients/${broker._id}?includeNeededDocs=false`,
+        `${API_BASE_URL}/admin/broker-clients/${broker._id}?includeNeededDocs=false`,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -58,13 +61,25 @@ const MBHomeScreen = () => {
         const data = await response.json();
         console.log('fetchCallRequests: raw response data:', data);
         console.log('fetchCallRequests: assignments count:', (data.assignments || []).length);
+        
+        // Log mbActivityStatus for all clients
+        if (data.assignments && data.assignments.length > 0) {
+          data.assignments.forEach((assignment, index) => {
+            if (assignment.clientId) {
+              console.log(`🟢 [Backend] Client ${index + 1}: ${assignment.clientId.name}, mbActivityStatus: ${assignment.clientId.mbActivityStatus || 'undefined'}`);
+            }
+          });
+        }
 
-        // Extract all clients from assignments
+        // Extract all clients from assignments and sort by recently added
         const allClients = (data.assignments || [])
           .filter(assignment => assignment.clientId != null)
           .map(assignment => {
             const client = assignment.clientId;
             const nameParts = (client.name || '').split(' ');
+            
+            // Log realtor info for debugging
+            console.log('Client:', client.name, 'realtorInfo:', client.realtorInfo);
             
             // Check if client has an active call request
             const hasCallRequest = client.callSchedulePreference && 
@@ -85,29 +100,26 @@ const MBHomeScreen = () => {
               callSchedulePreference: client.callSchedulePreference,
               hasCallRequest: hasCallRequest,
               realtorInfo: client.realtorInfo || client.assignedRealtor,
-              isNewSignup: client.isNewSignup || false,
               assignedAt: assignment.assignedAt,
+              mbActivityStatus: client.mbActivityStatus || 'Active',
+              documents: client.documents || [],
             };
+            
+            console.log('🟡 [Mapped] Client:', mapped.name, 'mbActivityStatus:', mapped.mbActivityStatus, 'realtorInfo:', !!mapped.realtorInfo);
+            
             return mapped;
-          });
+          })
+          .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt)); // Sort by most recent first
         
         // Categorize clients into different call types
         const callRequestClients = [];
-        const realtorClients = [];
+        const realtorClients = allClients; // All clients sorted by recent, with realtor info
         const introClients = [];
         
         allClients.forEach(client => {
           // Call Requested - clients with active call requests
           if (client.hasCallRequest) {
             callRequestClients.push(client);
-          }
-          // Realtor - new client - clients assigned to a realtor who signed up
-          else if (client.realtorInfo && client.realtorInfo.name && client.isNewSignup) {
-            realtorClients.push(client);
-          }
-          // Client intro - any new client signup
-          else if (client.isNewSignup) {
-            introClients.push(client);
           }
         });
         
@@ -138,11 +150,39 @@ const MBHomeScreen = () => {
           return filtered.sort((a, b) => new Date(b.requestedAt || b.assignedAt) - new Date(a.requestedAt || a.assignedAt));
         };
 
+        // Extract all documents from clients and create recent documents list
+        const documentsWithClients = [];
+        console.log('🔍 [Documents Debug] Total clients:', allClients.length);
+        
+        allClients.forEach(client => {
+          console.log('🔍 [Documents Debug] Client:', client.name, 'documents:', client.documents);
+          if (client.documents && Array.isArray(client.documents)) {
+            console.log('🔍 [Documents Debug] Client', client.name, 'has', client.documents.length, 'documents');
+            client.documents.forEach(doc => {
+              documentsWithClients.push({
+                docType: doc.docType,
+                fileName: doc.fileName,
+                uploadedAt: doc.uploadedAt,
+                clientName: client.name,
+                clientId: client._id,
+              });
+            });
+          }
+        });
+        
+        console.log('🔍 [Documents Debug] Total documents found:', documentsWithClients.length);
+        
+        // Sort by most recent and take top 5
+        const sortedDocuments = documentsWithClients.sort((a, b) => 
+          new Date(b.uploadedAt) - new Date(a.uploadedAt)
+        ).slice(0, 5);
+
         setCallRequests(applyFilter(callRequestClients));
         setRealtorNewClients(applyFilter(realtorClients));
         setClientIntros(applyFilter(introClients));
+        setRecentDocuments(sortedDocuments);
         
-        console.log(`Categorized clients - Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}`);
+        console.log(`Categorized clients - Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}, Recent Documents: ${sortedDocuments.length}`);
       }
     } catch (error) {
       console.error('Error fetching call requests:', error);
@@ -168,9 +208,9 @@ const MBHomeScreen = () => {
         // Mark as called
         setCalledClients(prev => new Set([...prev, client._id]));
         
-        // Update call status on backend
+        // Send notification to client that broker called
         await fetch(
-          `https://signup.roostapp.io/admin/client/${client._id}/mb-call-completed`,
+          `${API_BASE_URL}/admin/client/${client._id}/broker-call-notification`,
           {
             method: 'POST',
             headers: {
@@ -201,6 +241,7 @@ const MBHomeScreen = () => {
     const isCalled = calledClients.has(item._id);
     const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
     const status = isPriority ? 'Priority' : 'Active';
+    const isInactive = item.mbActivityStatus === 'Inactive';
 
     return (
       <ClientCard
@@ -209,6 +250,7 @@ const MBHomeScreen = () => {
         showStatus={false}
         showInitials={true}
         timeRange={getCallTimeDisplay(item)}
+        isInactive={isInactive}
         onPress={() => handleClientPress(item)}
       >
         {/* Call Button */}
@@ -255,8 +297,7 @@ const MBHomeScreen = () => {
   const remainingCalls = upcomingCall ? callRequests.slice(1) : callRequests;
   
   // Featured calls for other sections
-  const upcomingRealtorCall = realtorNewClients.length > 0 ? realtorNewClients[0] : null;
-  const remainingRealtorCalls = upcomingRealtorCall ? realtorNewClients.slice(1) : realtorNewClients;
+  const displayedRealtorClients = realtorNewClients.slice(0, 5); // Always show top 5 only
   
   const upcomingIntroCall = clientIntros.length > 0 ? clientIntros[0] : null;
   const remainingIntroCalls = upcomingIntroCall ? clientIntros.slice(1) : clientIntros;
@@ -306,6 +347,12 @@ const MBHomeScreen = () => {
     }
   };
 
+  // Format recently assigned date
+  const getAssignedTimeDisplay = (assignedAt) => {
+    if (!assignedAt) return 'Recently added';
+    return getRelativeTime(assignedAt);
+  };
+
   return (
     <View style={styles.container}>
       <Header />
@@ -333,6 +380,7 @@ const MBHomeScreen = () => {
               showStatus={false}
               showInitials={true}
               timeRange={getCallTimeDisplay(upcomingCall)}
+              isInactive={upcomingCall.mbActivityStatus === 'Inactive'}
               onPress={() => handleClientPress(upcomingCall)}
             >
               <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
@@ -374,51 +422,78 @@ const MBHomeScreen = () => {
           <Text style={styles.sectionTitle}>REALTOR - NEW CLIENT</Text>
         </View>
         
-        {upcomingRealtorCall ? (
-          <View style={styles.featuredCallSection}>
-            <ClientCard
-              clientName={`${upcomingRealtorCall.firstName || ''} ${upcomingRealtorCall.lastName || ''}`.trim()}
-              status={`Realtor: ${upcomingRealtorCall.realtorInfo?.name || 'Unknown'}`}
-              showStatus={true}
-              showInitials={true}
-              timeRange={getCallTimeDisplay(upcomingRealtorCall)}
-              onPress={() => handleClientPress(upcomingRealtorCall)}
-            >
-              <TouchableOpacity onPress={() => handleCall(upcomingRealtorCall)}>
-                <CallButtonIcon bgColor={"#2271B1"} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleReminder(upcomingRealtorCall)}>
-                <AlertButtonIcon />
-              </TouchableOpacity>
-            </ClientCard>
-          </View>
-        ) : null}
-
-        {remainingRealtorCalls.length > 0 ? (
-          remainingRealtorCalls.map((item) => (
-            <View key={item._id} style={styles.callItem}>
-              <ClientCard
-                clientName={`${item.firstName || ''} ${item.lastName || ''}`.trim()}
-                status={`Realtor: ${item.realtorInfo?.name || 'Unknown'}`}
-                showStatus={true}
-                showInitials={true}
-                timeRange={getCallTimeDisplay(item)}
-                onPress={() => handleClientPress(item)}
-              >
-                <TouchableOpacity onPress={() => handleCall(item)}>
-                  <CallButtonIcon />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleReminder(item)}>
-                  <AlertButtonIcon />
-                </TouchableOpacity>
-              </ClientCard>
-            </View>
-          ))
-        ) : !upcomingRealtorCall ? (
+        {displayedRealtorClients.length > 0 ? (
+          <>
+            {displayedRealtorClients.map((item) => {
+              const isInactive = item.mbActivityStatus === 'Inactive';
+              console.log('🔵 [Render] Realtor Client:', item.name, 'mbActivityStatus:', item.mbActivityStatus, 'isInactive:', isInactive);
+              
+              return (
+              <View key={item._id} style={styles.callItem}>
+                <ClientCard
+                  clientName={item.realtorInfo?.name 
+                    ? `${item.realtorInfo.name} (${item.firstName || ''} ${item.lastName || ''})`.trim()
+                    : `${item.firstName || ''} ${item.lastName || ''} (No realtor)`.trim()}
+                  status={''}
+                  showStatus={false}
+                  showInitials={true}
+                  timeRange={getAssignedTimeDisplay(item.assignedAt)}
+                  isInactive={isInactive}
+                  onPress={() => handleClientPress(item)}
+                >
+                  <TouchableOpacity onPress={() => {
+                    // Call realtor if available, otherwise call client
+                    if (item.realtorInfo?.phone) {
+                      handleCall({ phone: item.realtorInfo.phone, _id: item.realtorInfo._id });
+                    } else {
+                      handleCall(item);
+                    }
+                  }}>
+                    <CallButtonIcon />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => {
+                    // Open reminder for client (not realtor)
+                    handleReminder(item);
+                  }}>
+                    <AlertButtonIcon />
+                  </TouchableOpacity>
+                </ClientCard>
+                {item.realtorInfo && (
+                  <View style={styles.realtorContactSection}>
+                    <Text style={styles.realtorContactTitle}>Realtor Contact:</Text>
+                    {item.realtorInfo.phone && (
+                      <TouchableOpacity 
+                        style={styles.realtorContactRow}
+                        onPress={() => handleCall({ phone: item.realtorInfo.phone })}
+                      >
+                        <Ionicons name="call-outline" size={16} color={COLORS.primary} />
+                        <Text style={styles.realtorContactText}>
+                          {formatPhoneNumber(item.realtorInfo.phone)}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    {item.realtorInfo.email && (
+                      <TouchableOpacity 
+                        style={styles.realtorContactRow}
+                        onPress={() => Linking.openURL(`mailto:${item.realtorInfo.email}`)}
+                      >
+                        <Ionicons name="mail-outline" size={16} color={COLORS.primary} />
+                        <Text style={styles.realtorContactText}>
+                          {item.realtorInfo.email}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+            })}
+          </>
+        ) : (
           <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>You have no realtor calls scheduled for {selectedFilter === 'All clients' ? 'today' : selectedFilter.toLowerCase()}</Text>
+            <Text style={styles.emptyFeaturedText}>No clients assigned yet</Text>
           </View>
-        ) : null}
+        )}
 
         {/* CLIENT INTRO SECTION */}
         <View style={styles.titleContainer}>
@@ -433,6 +508,7 @@ const MBHomeScreen = () => {
               showStatus={false}
               showInitials={true}
               timeRange={getCallTimeDisplay(upcomingIntroCall)}
+              isInactive={upcomingIntroCall.mbActivityStatus === 'Inactive'}
               onPress={() => handleClientPress(upcomingIntroCall)}
             >
               <TouchableOpacity onPress={() => handleCall(upcomingIntroCall)}>
@@ -454,6 +530,7 @@ const MBHomeScreen = () => {
                 showStatus={false}
                 showInitials={true}
                 timeRange={getCallTimeDisplay(item)}
+                isInactive={item.mbActivityStatus === 'Inactive'}
                 onPress={() => handleClientPress(item)}
               >
                 <TouchableOpacity onPress={() => handleCall(item)}>
@@ -470,6 +547,35 @@ const MBHomeScreen = () => {
             <Text style={styles.emptyFeaturedText}>You have no client intro calls scheduled for {selectedFilter === 'All clients' ? 'today' : selectedFilter.toLowerCase()}</Text>
           </View>
         ) : null}
+
+        {/* DOCUMENTS SECTION */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>DOCUMENTS</Text>
+        </View>
+
+        {recentDocuments.length > 0 ? (
+          recentDocuments.map((doc, index) => (
+            <View key={`${doc.clientId}-${index}`} style={styles.documentItem}>
+              <View style={styles.documentContent}>
+                <Text style={styles.documentName}>{doc.docType}</Text>
+                <Text style={styles.documentArrow}>→</Text>
+                <Text style={styles.documentClientName}>{doc.clientName}</Text>
+              </View>
+              <Text style={styles.documentTime}>
+                {new Date(doc.uploadedAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyFeaturedCard}>
+            <Text style={styles.emptyFeaturedText}>No documents have been submitted recently</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Filter Modal */}
@@ -492,6 +598,11 @@ const MBHomeScreen = () => {
             setSelectedClient(null);
           }}
           client={selectedClient}
+          onSuccess={() => {
+            console.log('🔄 [MBHomeScreen] onSuccess called - refreshing client list');
+            // Refresh the client list after setting reminder or inactive status
+            fetchCallRequests();
+          }}
         />
       )}
     </View>
@@ -715,6 +826,75 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
     textAlign: 'center',
+    fontFamily: 'futura',
+  },
+  realtorContactSection: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 24,
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  realtorContactTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.slate,
+    marginBottom: 8,
+    fontFamily: 'futura',
+  },
+  realtorContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  realtorContactText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    marginLeft: 8,
+    fontFamily: 'futura',
+  },
+  documentItem: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 24,
+    marginBottom: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  documentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  documentName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.black,
+    fontFamily: 'futura',
+  },
+  documentArrow: {
+    fontSize: 16,
+    color: COLORS.slate,
+    marginHorizontal: 8,
+    fontFamily: 'futura',
+  },
+  documentClientName: {
+    fontSize: 16,
+    color: COLORS.slate,
+    fontFamily: 'futura',
+  },
+  documentTime: {
+    fontSize: 12,
+    color: COLORS.gray,
     fontFamily: 'futura',
   },
 });

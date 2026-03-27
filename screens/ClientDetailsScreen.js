@@ -10,11 +10,14 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import { formatPhoneNumber } from '../utils/phoneFormatUtils';
+import { useAuth } from '../context/AuthContext';
 
 const ClientDetailsScreen = ({ route, navigation }) => {
   const { client: initialClient } = route.params;
+  const { authToken } = useAuth();
   const [client, setClient] = useState(initialClient);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -34,6 +37,20 @@ const ClientDetailsScreen = ({ route, navigation }) => {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
+        
+        // Send notification to client
+        if (client?._id) {
+          await fetch(
+            `${API_BASE_URL}/admin/client/${client._id}/broker-call-notification`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            }
+          );
+        }
       } else {
         Alert.alert('Error', 'Unable to make phone call');
       }

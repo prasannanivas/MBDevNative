@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import axios from "axios";
+import API_BASE_URL from '../config/api';
 
 // Configure how notifications appear when the app is in foreground
 Notifications.setNotificationHandler({
@@ -96,7 +97,7 @@ export async function registerDeviceOnServer(brokerId, token, authToken) {
     });
 
     const response = await axios.post(
-      "https://signup.roostapp.io/notifications/register-device",
+      `${API_BASE_URL}/notifications/register-device`,
       payload,
       {
         headers: {

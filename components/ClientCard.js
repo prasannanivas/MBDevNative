@@ -10,6 +10,7 @@ const ClientCard = ({
   lastMessage,
   timeRange,
   isUnread = false,
+  isInactive = false,
   onPress, 
   children 
 }) => {
@@ -23,14 +24,14 @@ const ClientCard = ({
     <View style={styles.cardWrapper}>
       {/* Client Info Card */}
       <TouchableOpacity 
-        style={styles.clientCard}
+        style={[styles.clientCard, isInactive && styles.clientCardInactive]}
         onPress={onPress}
         activeOpacity={0.7}
       >
         <View style={styles.container}>
           {/* Conditional Profile Icon */}
           {showInitials && (
-            <View style={styles.profileIcon}>
+            <View style={[styles.profileIcon, isInactive && styles.profileIconInactive]}>
               <View style={styles.profileIconFrame}>
                 <Text style={styles.initials}>
                   {getInitials(clientName)}
@@ -42,7 +43,7 @@ const ClientCard = ({
           {/* Right Section */}
           <View style={[styles.rightSection, !showInitials && styles.rightSectionFullWidth]}>
             {/* Name */}
-            <Text style={[styles.name, isUnread && styles.nameUnread]} numberOfLines={1}>
+            <Text style={[styles.name, isUnread && styles.nameUnread, isInactive && styles.nameInactive]} numberOfLines={1}>
               {clientName || 'Client Name'}
             </Text>
             
@@ -203,6 +204,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  // Inactive styles
+  clientCardInactive: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.6,
+  },
+  profileIconInactive: {
+    backgroundColor: '#999999',
+  },
+  nameInactive: {
+    color: '#888888',
   },
 });
 
