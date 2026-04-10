@@ -32,6 +32,7 @@ const RemindersScreen = () => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [modalClientData, setModalClientData] = useState(null);
 
   // Load reminders from local storage whenever screen is focused
   useFocusEffect(
@@ -68,6 +69,8 @@ const RemindersScreen = () => {
           
           if (!client) return;
           
+          console.log(`📦 [fetchReminders] client: ${client.name} | mbActivityStatus from API: ${client.mbActivityStatus}`);
+          
           if (client?.reminders && client.reminders.length > 0) {
             client.reminders.forEach((reminder) => {
               if (reminder.isActive !== false) {
@@ -98,75 +101,64 @@ const RemindersScreen = () => {
 
         console.log('📋 Server reminders found:', serverReminders.length);
 
-        // Cache to local storage
-        const storageKey = `reminders_${broker._id}`;
-        await AsyncStorage.setItem(storageKey, JSON.stringify(serverReminders));
-        
         const now = new Date();
-        
-        // Load existing notification IDs to avoid duplicates
-        const notificationStorageKey = `reminder_notifications_${broker._id}`;
-        const existingNotificationsData = await AsyncStorage.getItem(notificationStorageKey);
-        const existingNotificationIds = existingNotificationsData 
-          ? JSON.parse(existingNotificationsData) 
-          : {};
-        
-        // Clean up notification IDs for reminders that no longer exist
-        const serverReminderIds = new Set(serverReminders.map(r => r.id));
-        const cleanedNotificationIds = {};
-        for (const [reminderId, notificationId] of Object.entries(existingNotificationIds)) {
-          if (serverReminderIds.has(reminderId)) {
-            cleanedNotificationIds[reminderId] = notificationId;
-          } else {
-            // Cancel orphaned notification
-            await cancelReminderNotification(notificationId);
-            console.log(`🧹 Cleaned up orphaned notification for deleted reminder ${reminderId}`);
-          }
-        }
-        
-        // Schedule notifications ONLY for reminders that don't already have one
-        const notificationIds = { ...cleanedNotificationIds };
-        for (const reminder of serverReminders) {
-          const reminderDate = new Date(reminder.date);
-          
-          // Only schedule if: 1) in the future, AND 2) not already scheduled
-          if (reminderDate > now && !notificationIds[reminder.id]) {
-            const notificationId = await scheduleReminderNotification(
-              reminder,
-              reminder.clientName
-            );
-            if (notificationId) {
-              notificationIds[reminder.id] = notificationId;
-              console.log(`📅 Scheduled NEW notification for reminder ${reminder.id}`);
-            }
-          } else if (notificationIds[reminder.id]) {
-            console.log(`⏭️ Skipping reminder ${reminder.id} - already scheduled`);
-          }
-        }
-        
-        // Store updated notification IDs
-        await AsyncStorage.setItem(
-          notificationStorageKey,
-          JSON.stringify(notificationIds)
-        );
-        
-        // Sort and display
+
+        // Sort and update UI FIRST — before any notification work that could throw
         const upcomingReminders = serverReminders.filter(r => new Date(r.date) >= now);
         const pastReminders = serverReminders.filter(r => new Date(r.date) < now);
-        
         upcomingReminders.sort((a, b) => new Date(a.date) - new Date(b.date));
         pastReminders.sort((a, b) => new Date(b.date) - new Date(a.date));
-        
         const sortedReminders = [...upcomingReminders, ...pastReminders];
         setReminders(sortedReminders);
         organizeSections(sortedReminders, selectedFilter);
-        
-        console.log('✅ Reminders synced and notifications scheduled');
+
+        // Cache fresh data with versioned key (v2 busts any old stale cache)
+        const storageKey = `reminders_v2_${broker._id}`;
+        await AsyncStorage.setItem(storageKey, JSON.stringify(serverReminders));
+
+        // Notification scheduling in its own try/catch so it can never affect UI state
+        try {
+          const notificationStorageKey = `reminder_notifications_${broker._id}`;
+          const existingNotificationsData = await AsyncStorage.getItem(notificationStorageKey);
+          const existingNotificationIds = existingNotificationsData
+            ? JSON.parse(existingNotificationsData)
+            : {};
+
+          const serverReminderIds = new Set(serverReminders.map(r => r.id));
+          const cleanedNotificationIds = {};
+          for (const [reminderId, notificationId] of Object.entries(existingNotificationIds)) {
+            if (serverReminderIds.has(reminderId)) {
+              cleanedNotificationIds[reminderId] = notificationId;
+            } else {
+              await cancelReminderNotification(notificationId);
+              console.log(`🧹 Cleaned up orphaned notification for deleted reminder ${reminderId}`);
+            }
+          }
+
+          const notificationIds = { ...cleanedNotificationIds };
+          for (const reminder of serverReminders) {
+            const reminderDate = new Date(reminder.date);
+            if (reminderDate > now && !notificationIds[reminder.id]) {
+              const notificationId = await scheduleReminderNotification(reminder, reminder.clientName);
+              if (notificationId) {
+                notificationIds[reminder.id] = notificationId;
+                console.log(`📅 Scheduled NEW notification for reminder ${reminder.id}`);
+              }
+            } else if (notificationIds[reminder.id]) {
+              console.log(`⏭️ Skipping reminder ${reminder.id} - already scheduled`);
+            }
+          }
+
+          await AsyncStorage.setItem(notificationStorageKey, JSON.stringify(notificationIds));
+          console.log('✅ Reminders synced and notifications scheduled');
+        } catch (notifError) {
+          console.warn('⚠️ Notification scheduling failed (UI unaffected):', notifError);
+        }
       }
     } catch (error) {
       console.error('❌ Error fetching reminders:', error);
-      // Try to load from cache if server fetch fails
-      const storageKey = `reminders_${broker._id}`;
+      // Fall back to versioned cache only
+      const storageKey = `reminders_v2_${broker._id}`;
       const cached = await AsyncStorage.getItem(storageKey);
       if (cached) {
         const cachedReminders = JSON.parse(cached);
@@ -394,6 +386,17 @@ const RemindersScreen = () => {
 
   const handleSetReminder = () => {
     if (selectedClient?.clientData) {
+      console.log('🔍 [handleSetReminder] selectedClient.clientId:', selectedClient.clientId, '| type:', typeof selectedClient.clientId);
+      console.log('🔍 [handleSetReminder] selectedClient.clientData.mbActivityStatus:', selectedClient.clientData?.mbActivityStatus);
+      console.log('🔍 [handleSetReminder] reminders count:', reminders.length);
+      // Use String() to ensure type-safe comparison (ObjectId vs string)
+      const freshReminder = reminders.find(r => String(r.clientId) === String(selectedClient.clientId));
+      console.log('🔍 [handleSetReminder] freshReminder found:', !!freshReminder);
+      console.log('🔍 [handleSetReminder] freshReminder.clientData:', JSON.stringify(freshReminder?.clientData));
+      const freshClientData = freshReminder?.clientData || selectedClient.clientData;
+      console.log('🔍 [handleSetReminder] final mbActivityStatus going to modal:', freshClientData?.mbActivityStatus);
+      // Set modalClientData and open modal in same batch — avoids stale selectedClient issue
+      setModalClientData(freshClientData);
       setShowActionModal(false);
       setShowReminderModal(true);
     }
@@ -523,9 +526,10 @@ const RemindersScreen = () => {
         visible={showReminderModal}
         onClose={() => {
           setShowReminderModal(false);
-          fetchAndCacheReminders(); // Refresh to show new reminders
+          fetchAndCacheReminders();
         }}
-        client={selectedClient?.clientData}
+        client={modalClientData}
+        onSuccess={() => fetchAndCacheReminders()}
       />
     </View>
   );

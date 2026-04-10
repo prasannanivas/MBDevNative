@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,15 @@ import COLORS from '../utils/colors';
 
 const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
   const { broker, authToken } = useAuth();
-  const [step, setStep] = useState(1); // 1: Date, 2: Custom Date, 3: Type, 4: Inactive Confirmation
+  const [step, setStep] = useState(1);
+
+  useEffect(() => {
+    if (visible) {
+      console.log('🟡 [ReminderModal] Opened — client._id:', client?._id);
+      console.log('🟡 [ReminderModal] Opened — full client:', JSON.stringify(client));
+      console.log('🟡 [ReminderModal] Opened — client.mbActivityStatus:', client?.mbActivityStatus);
+    }
+  }, [visible, client]); // 1: Date, 2: Custom Date, 3: Type, 4: Inactive Confirmation
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
   const [comment, setComment] = useState('');

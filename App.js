@@ -14,6 +14,7 @@ import { ChatProvider } from './context/ChatContext';
 import LoginScreen from './screens/LoginScreen';
 import MainTabs from './navigation/MainTabs';
 import ClientDetailsScreen from './screens/ClientDetailsScreen';
+import RealtorDetailsScreen from './screens/RealtorDetailsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
 // Utils
@@ -97,6 +98,20 @@ const AppNavigator = () => {
             component={ClientDetailsScreen}
             options={{
               title: 'Client Details',
+              headerStyle: {
+                backgroundColor: COLORS.primary,
+              },
+              headerTintColor: COLORS.white,
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+            }}
+          />
+          <Stack.Screen
+            name="RealtorDetails"
+            component={RealtorDetailsScreen}
+            options={{
+              title: 'Realtor Details',
               headerStyle: {
                 backgroundColor: COLORS.primary,
               },

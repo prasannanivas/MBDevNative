@@ -34,7 +34,7 @@ const MBHomeScreen = () => {
   const [recentDocuments, setRecentDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('All clients');
+  const [selectedFilter, setSelectedFilter] = useState('Today');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -62,11 +62,11 @@ const MBHomeScreen = () => {
         console.log('fetchCallRequests: raw response data:', data);
         console.log('fetchCallRequests: assignments count:', (data.assignments || []).length);
         
-        // Log mbActivityStatus for all clients
+        // Log mbActivityStatus and documents for all clients
         if (data.assignments && data.assignments.length > 0) {
           data.assignments.forEach((assignment, index) => {
             if (assignment.clientId) {
-              console.log(`🟢 [Backend] Client ${index + 1}: ${assignment.clientId.name}, mbActivityStatus: ${assignment.clientId.mbActivityStatus || 'undefined'}`);
+              console.log(`🟢 [Backend] Client ${index + 1}: ${assignment.clientId.name}, mbActivityStatus: ${assignment.clientId.mbActivityStatus || 'undefined'}, documents: ${assignment.clientId.documents ? assignment.clientId.documents.length : 'undefined'}`);
             }
           });
         }
@@ -111,12 +111,13 @@ const MBHomeScreen = () => {
           })
           .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt)); // Sort by most recent first
         
-        // Categorize clients into different call types
+        // Categorize clients into different call types (exclude inactive)
+        const activeClients = allClients.filter(c => c.mbActivityStatus !== 'Inactive');
         const callRequestClients = [];
-        const realtorClients = allClients; // All clients sorted by recent, with realtor info
+        const realtorClients = activeClients; // Active clients sorted by recent, with realtor info
         const introClients = [];
         
-        allClients.forEach(client => {
+        activeClients.forEach(client => {
           // Call Requested - clients with active call requests
           if (client.hasCallRequest) {
             callRequestClients.push(client);
@@ -178,8 +179,8 @@ const MBHomeScreen = () => {
         ).slice(0, 5);
 
         setCallRequests(applyFilter(callRequestClients));
-        setRealtorNewClients(applyFilter(realtorClients));
-        setClientIntros(applyFilter(introClients));
+        setRealtorNewClients(realtorClients);
+        setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
         
         console.log(`Categorized clients - Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}, Recent Documents: ${sortedDocuments.length}`);
@@ -415,7 +416,13 @@ const MBHomeScreen = () => {
               {renderCallRequestCard({ item })}
             </View>
           ))
-        ) : null}
+        ) : (
+          <View style={styles.emptyFeaturedCard}>
+            <Text style={styles.emptyFeaturedText}>
+              You have no calls scheduled for {selectedFilter === 'All clients' ? 'all time' : selectedFilter.toLowerCase()}
+            </Text>
+          </View>
+        )}
 
         {/* REALTOR - NEW CLIENT SECTION */}
         <View style={styles.titleContainer}>
@@ -437,12 +444,12 @@ const MBHomeScreen = () => {
                   status={''}
                   showStatus={false}
                   showInitials={true}
+                  squareIcon={true}
                   timeRange={getAssignedTimeDisplay(item.assignedAt)}
                   isInactive={isInactive}
-                  onPress={() => handleClientPress(item)}
+                  onPress={() => navigation.navigate('RealtorDetails', { client: item })}
                 >
                   <TouchableOpacity onPress={() => {
-                    // Call realtor if available, otherwise call client
                     if (item.realtorInfo?.phone) {
                       handleCall({ phone: item.realtorInfo.phone, _id: item.realtorInfo._id });
                     } else {
@@ -451,40 +458,10 @@ const MBHomeScreen = () => {
                   }}>
                     <CallButtonIcon />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => {
-                    // Open reminder for client (not realtor)
-                    handleReminder(item);
-                  }}>
+                  <TouchableOpacity onPress={() => handleReminder(item)}>
                     <AlertButtonIcon />
                   </TouchableOpacity>
                 </ClientCard>
-                {item.realtorInfo && (
-                  <View style={styles.realtorContactSection}>
-                    <Text style={styles.realtorContactTitle}>Realtor Contact:</Text>
-                    {item.realtorInfo.phone && (
-                      <TouchableOpacity 
-                        style={styles.realtorContactRow}
-                        onPress={() => handleCall({ phone: item.realtorInfo.phone })}
-                      >
-                        <Ionicons name="call-outline" size={16} color={COLORS.primary} />
-                        <Text style={styles.realtorContactText}>
-                          {formatPhoneNumber(item.realtorInfo.phone)}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    {item.realtorInfo.email && (
-                      <TouchableOpacity 
-                        style={styles.realtorContactRow}
-                        onPress={() => Linking.openURL(`mailto:${item.realtorInfo.email}`)}
-                      >
-                        <Ionicons name="mail-outline" size={16} color={COLORS.primary} />
-                        <Text style={styles.realtorContactText}>
-                          {item.realtorInfo.email}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
               </View>
             );
             })}
@@ -548,7 +525,7 @@ const MBHomeScreen = () => {
           </View>
         ) : null}
 
-        {/* DOCUMENTS SECTION */}
+        {/* DOCUMENTS SECTION
         <View style={styles.titleContainer}>
           <Text style={styles.sectionTitle}>DOCUMENTS</Text>
         </View>
@@ -575,7 +552,7 @@ const MBHomeScreen = () => {
           <View style={styles.emptyFeaturedCard}>
             <Text style={styles.emptyFeaturedText}>No documents have been submitted recently</Text>
           </View>
-        )}
+        )} */}
       </ScrollView>
 
       {/* Filter Modal */}
@@ -834,22 +811,49 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  realtorContactContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  realtorProfileIcon: {
+    width: 49,
+    height: 49,
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  realtorInitials: {
+    fontFamily: 'futura',
+    fontWeight: '700',
+    fontSize: 20,
+    lineHeight: 27,
+    color: '#FDFDFD',
+    textAlign: 'center',
+  },
+  realtorInfoSection: {
+    flex: 1,
+    gap: 4,
   },
   realtorContactTitle: {
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.slate,
-    marginBottom: 8,
+    marginBottom: 4,
     fontFamily: 'futura',
   },
   realtorContactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
-    marginBottom: 4,
   },
   realtorContactText: {
     fontSize: 14,

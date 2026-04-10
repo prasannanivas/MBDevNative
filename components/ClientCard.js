@@ -11,6 +11,7 @@ const ClientCard = ({
   timeRange,
   isUnread = false,
   isInactive = false,
+  squareIcon = false,
   onPress, 
   children 
 }) => {
@@ -31,7 +32,7 @@ const ClientCard = ({
         <View style={styles.container}>
           {/* Conditional Profile Icon */}
           {showInitials && (
-            <View style={[styles.profileIcon, isInactive && styles.profileIconInactive]}>
+            <View style={[styles.profileIcon, isInactive && styles.profileIconInactive, squareIcon && styles.profileIconSquare]}>
               <View style={styles.profileIconFrame}>
                 <Text style={styles.initials}>
                   {getInitials(clientName)}
@@ -123,6 +124,9 @@ const styles = StyleSheet.create({
     borderRadius: 45,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileIconSquare: {
+    borderRadius: 4,
   },
   profileIconFrame: {
     width: 49,

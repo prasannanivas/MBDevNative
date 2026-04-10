@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "roost-drive",
+  "private_key_id": "ff731653e3618b7c60b88eed1bf4538b7195fc83",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDkuhAx5Rc1nelR\n5acix43xDlMbvn1v/fObVi33Yvdwyw0WGE9hrr34bR4rYGWzccE5LPAvEOpGSTzY\ncbxROvOeFpoZW8d3Aeo/JGA7tOvTM6slxI+26+rsUdihUEune1zZlQQw0MuLKUpK\nAnM78p+mGvJQzdpI+RYB0bMahmxhVsgE41cV7XRcjZcH6/x3EXwjB4oYM6b0qTm6\nDrVLkXMiuCGexrn0jlw1arTfhsxSotCTB4d2rYO1letGbfFHTTHDM9j3ZsKMuapZ\n+1k1DlHndFuxGYuUwXxPfjf4MtLnmVKdZ62j3/luFFvAZrArIZ5gTDSBa8SWhF1J\nKr6V4+/HAgMBAAECggEAAfjZYeWjCmzqg1tPRDY5CD6JwzxrgB5OBuVW71d/YTiG\n9qKjlCGkZqtv9VIeLJVnciSy/aseKt+G5EYwGhYVFxYgsMjy2Zj+6DYhPvKKqxgB\nrHsT/XgKe2/pcKIsw+yFFyUq05Uk1ee3gqWDig8O3FObtOjCWP6cWwUarCqY32cS\nzkDAnFHc1C1eEekCd+PglDEq/jm2BQ7qDTyJvU5F+7I11fUMz0EdzMiJHSb3zH19\nI3DlzAaNqFtUP396Oasn3m187oAq6jBdc+voJ7RUJaC++F5NJb9OFiWso4nFpww0\nlr51BC5+spk6tmQWfkD3ZPsyyQxvXSwnqVLUV99ZkQKBgQD0iStXEQp9QEEVLh+U\nmBaTKyvo+gDW6B5EIEmQq/0cX6Cgl6QtDFdnjndzw5UCrbAeF4pP458dv9vpBdSg\nBN9F9LSxqAUro6X9mo493BzIjyod5k3AorWsRfyBY/yGf6jkyryzQYdmwgJj9AZR\nMycFmh31ceSNMDjLh0I3XpxPkQKBgQDvcyjykiz42rf4WWwv444w/1J4y1K+FO3T\nelfKw11jfI3wDPNWU8xDJrXJUURXSulzt00JC6LXUGsuM4jOQtXuHA8JUCRDqgA6\n4GLtw+V/S/R+k8c0aMR7VoIWRzVUxLp0MEcp0PyINae2RxfcCFuCEdlHYW5QHiaL\nbKm634bN1wKBgEKmzKhbnbdL9zFVtAfleGm+n6ZN1kK9W9qHzmVfa4r7SaXcD0S0\nE3LHcymbipcDTni1Q97IlQsfy0n1a+H90fmYXFP8DwS5AzpfkRutTi8gToN9zX2P\nG+OL4+pEnYTvcNKDq/FUEBrjEJG75qjlP2KYgkfvNjOBjEl1YYgEAqjxAoGAZuTz\nmZka3i0OlRfIF6QPPBrbU7D7c1cHA7M0+pqNDO0/CQJnppcH1WtS/pl/Zot4WhNQ\ndSyc4y1ZgVb/2LJ7v4ArLfNUQgdRZft6R3XArrzy6VmTZoAGvoFkETK0RiLrhHYi\nfmOhwN5dnURbil/FAtWsqrHBd4gdRBiDrxvSj60CgYAQz9i/wpSHIyHBKyc2Ak4H\n6D+X80dHZayxhwHy4W1ZekeRo8xisTyQS5/jH2txNPDmOtgMskgV1ur/jk9JOq7U\nOCMFyGbvrlBWN0s+sofA4JaOBihS9Moh+ixXZrOd84l9JV2Ps5zBD50iqAnCXGhn\nRU5f4u/mROUAb3WBDTI2Qg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "roost-drive-uploader@roost-drive.iam.gserviceaccount.com",
+  "client_id": "112628898564144732136",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/roost-drive-uploader%40roost-drive.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

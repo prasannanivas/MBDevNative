@@ -59,6 +59,7 @@ const ClientsScreen = () => {
               email: client.email,
               phone: client.phone,
               type: client.type || 'client',
+              mbActivityStatus: client.mbActivityStatus || 'Active',
             };
           });
 
