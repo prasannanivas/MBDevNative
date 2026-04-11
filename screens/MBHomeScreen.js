@@ -160,18 +160,22 @@ const MBHomeScreen = () => {
           if (client.documents && Array.isArray(client.documents)) {
             console.log('🔍 [Documents Debug] Client', client.name, 'has', client.documents.length, 'documents');
             client.documents.forEach(doc => {
-              documentsWithClients.push({
-                docType: doc.docType,
-                fileName: doc.fileName,
-                uploadedAt: doc.uploadedAt,
-                clientName: client.name,
-                clientId: client._id,
-              });
+              // Only include documents that have NOT been approved or rejected
+              if (doc.status !== 'Approved' && doc.status !== 'Rejected') {
+                documentsWithClients.push({
+                  docType: doc.docType,
+                  fileName: doc.fileName,
+                  uploadedAt: doc.uploadedAt,
+                  status: doc.status,
+                  clientName: client.name,
+                  clientId: client._id,
+                });
+              }
             });
           }
         });
         
-        console.log('🔍 [Documents Debug] Total documents found:', documentsWithClients.length);
+        console.log('🔍 [Documents Debug] Total NEW documents found (not approved/rejected):', documentsWithClients.length);
         
         // Sort by most recent and take top 5
         const sortedDocuments = documentsWithClients.sort((a, b) => 
@@ -525,9 +529,9 @@ const MBHomeScreen = () => {
           </View>
         ) : null}
 
-        {/* DOCUMENTS SECTION
+        {/* NEW DOCUMENTS SECTION */}
         <View style={styles.titleContainer}>
-          <Text style={styles.sectionTitle}>DOCUMENTS</Text>
+          <Text style={styles.sectionTitle}>NEW DOCUMENTS</Text>
         </View>
 
         {recentDocuments.length > 0 ? (
@@ -550,9 +554,9 @@ const MBHomeScreen = () => {
           ))
         ) : (
           <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>No documents have been submitted recently</Text>
+            <Text style={styles.emptyFeaturedText}>No new documents pending review</Text>
           </View>
-        )} */}
+        )}
       </ScrollView>
 
       {/* Filter Modal */}

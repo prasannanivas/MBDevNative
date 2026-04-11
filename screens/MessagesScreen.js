@@ -86,16 +86,16 @@ const MessagesScreen = () => {
           filtered = chats.filter(c => c.unreadCount > 0);
         }
         
-        // Sort conversations: recent messages first, empty messages last
+        // Sort conversations: UNREAD first, then by most recent
         filtered = filtered.sort((a, b) => {
-          const hasMessageA = a.lastMessage && a.lastMessage.trim() !== '';
-          const hasMessageB = b.lastMessage && b.lastMessage.trim() !== '';
+          const isUnreadA = a.unreadCount > 0;
+          const isUnreadB = b.unreadCount > 0;
           
-          // If one has a message and the other doesn't, prioritize the one with message
-          if (hasMessageA && !hasMessageB) return -1;
-          if (!hasMessageA && hasMessageB) return 1;
+          // Prioritize unread messages at the top
+          if (isUnreadA && !isUnreadB) return -1;
+          if (!isUnreadA && isUnreadB) return 1;
           
-          // If both have messages or both don't have messages, sort by timestamp
+          // If both are unread or both are read, sort by timestamp
           const timeA = new Date(a.lastMessageAt || 0);
           const timeB = new Date(b.lastMessageAt || 0);
           
@@ -154,7 +154,7 @@ const MessagesScreen = () => {
           <TouchableOpacity
             onPress={() => handleConversationPress(item)}
           >
-            <MessageIcon width={43} height={43} />
+            <MessageIcon width={43} height={43} isUnread={isUnread} />
           </TouchableOpacity>
 
           {/* Alert Icon */}
@@ -206,14 +206,14 @@ const MessagesScreen = () => {
                 <Text style={styles.filterButtonText}>{selectedFilter}</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.leftSection}>
+            {/* <View style={styles.leftSection}>
               <TouchableOpacity
                 style={[styles.unreadButton, selectedFilter === 'Unread' && styles.unreadButtonActive]}
                 onPress={() => setSelectedFilter(selectedFilter === 'Unread' ? 'All' : 'Unread')}
               >
                 <Text style={[styles.unreadButtonText, selectedFilter === 'Unread' && styles.unreadButtonTextActive]}>Unread</Text>
               </TouchableOpacity>
-            </View>
+            </View> */}
           </View>
         }
         ListEmptyComponent={renderEmptyState}
