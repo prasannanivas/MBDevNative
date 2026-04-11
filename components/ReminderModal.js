@@ -39,7 +39,28 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
   const [customYear, setCustomYear] = useState('');
 
   const dateOptions = ['Today', 'Tomorrow', 'Next week', 'Next month', 'Custom'];
-  const typeOptions = ['Call client', 'Call Realtor', 'Message client', 'Message Realtor'];
+  
+  // Filter type options based on whether client has a realtor assigned
+  const getTypeOptions = () => {
+    // Check if this client has a realtor (realtorInfo field exists)
+    const hasRealtor = client?.realtorInfo && Object.keys(client.realtorInfo).length > 0;
+    
+    console.log('🔍 [ReminderModal] Client:', client?.name);
+    console.log('🔍 [ReminderModal] Has realtorInfo:', hasRealtor);
+    console.log('🔍 [ReminderModal] RealtorInfo:', client?.realtorInfo);
+    
+    if (hasRealtor) {
+      // Client has a realtor, show all 4 options
+      console.log('✅ [ReminderModal] Showing all 4 options (client + realtor)');
+      return ['Call client', 'Message client', 'Call Realtor', 'Message Realtor'];
+    } else {
+      // No realtor, show only client contact options
+      console.log('✅ [ReminderModal] Showing only Client options');
+      return ['Call client', 'Message client'];
+    }
+  };
+  
+  const typeOptions = getTypeOptions();
 
   const handleDateSelect = (option) => {
     Keyboard.dismiss();
@@ -96,6 +117,9 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
 
     setIsSubmitting(true);
     try {
+      // Encode type in comment field using unique separator |~|
+      const encodedComment = `${selectedType}|~|${comment || ''}`;
+      
       // Save to server (single source of truth)
       const response = await fetch(
         `${API_BASE_URL}/admin/client/${client._id}/reminders`,
@@ -107,8 +131,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
           },
           body: JSON.stringify({
             date: selectedDate.toISOString(),
-            comment: comment || selectedType,
-            type: selectedType,
+            comment: encodedComment,
           }),
         }
       );
@@ -301,9 +324,40 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
     </View>
   );
 
+  const getDateDisplayText = () => {
+    if (!selectedDate) return '';
+    
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isSameDay = (d1, d2) => 
+      d1.getDate() === d2.getDate() && 
+      d1.getMonth() === d2.getMonth() && 
+      d1.getFullYear() === d2.getFullYear();
+    
+    if (isSameDay(selectedDate, today)) return 'Today';
+    if (isSameDay(selectedDate, tomorrow)) return 'Tomorrow';
+    
+    return selectedDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
   const renderTypeStep = () => (
     <View style={styles.modalContent}>
       <Text style={styles.title}>Set reminder - Type</Text>
+
+      <View style={styles.customDateHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+        <View style={styles.customLabel}>
+          <Text style={styles.customLabelText}>{getDateDisplayText()}</Text>
+        </View>
+      </View>
 
       <View style={styles.optionsList}>
         {typeOptions.map((option) => (

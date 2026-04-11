@@ -75,6 +75,22 @@ const ClientDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleRealtorCall = async () => {
+    if (!client?.realtorInfo?.phone) return;
+    
+    const url = `tel:${client.realtorInfo.phone}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Unable to make phone call');
+      }
+    } catch (error) {
+      console.error('Error making call:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -149,6 +165,36 @@ const ClientDetailsScreen = ({ route, navigation }) => {
           <View style={styles.infoRow}>
             <Ionicons name="location" size={20} color={COLORS.slate} />
             <Text style={styles.infoText}>{client.address}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Realtor Information */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Realtor Information</Text>
+        
+        <View style={styles.infoRow}>
+          <Ionicons name="person" size={20} color={COLORS.slate} />
+          <Text style={styles.infoText}>
+            {client.realtorInfo?.name || 'N/A'}
+          </Text>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.infoRow} 
+          onPress={handleRealtorCall}
+          disabled={!client.realtorInfo?.phone}
+        >
+          <Ionicons name="call" size={20} color={COLORS.slate} />
+          <Text style={[styles.infoText, client.realtorInfo?.phone && styles.infoTextClickable]}>
+            {client.realtorInfo?.phone ? formatPhoneNumber(client.realtorInfo.phone) : 'N/A'}
+          </Text>
+        </TouchableOpacity>
+
+        {client.realtorInfo?.email && (
+          <View style={styles.infoRow}>
+            <Ionicons name="mail" size={20} color={COLORS.slate} />
+            <Text style={styles.infoText}>{client.realtorInfo.email}</Text>
           </View>
         )}
       </View>
@@ -308,6 +354,10 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     marginLeft: 12,
     flex: 1,
+  },
+  infoTextClickable: {
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
   notesText: {
     fontSize: 15,

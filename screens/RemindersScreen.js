@@ -47,10 +47,9 @@ const RemindersScreen = () => {
     try {
       console.log('📋 Fetching reminders from server for broker:', broker._id);
       
-      // Fetch from server (single source of truth) with cache busting
-      const timestamp = new Date().getTime();
+      // Fetch from server (single source of truth)
       const response = await fetch(
-        `${API_BASE_URL}/admin/broker-clients/${broker._id}?t=${timestamp}`,
+        `${API_BASE_URL}/admin/broker-clients/${broker._id}`,
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -330,12 +329,23 @@ const RemindersScreen = () => {
       hour12: true,
     });
     
-    const action = reminder.comment || reminder.type || 'Reminder';
+    // Decode type from comment field (format: "TYPE|~|comment")
+    let type = 'Reminder';
+    let actualComment = reminder.comment || '';
+    
+    if (reminder.comment && reminder.comment.includes('|~|')) {
+      const parts = reminder.comment.split('|~|');
+      type = parts[0];
+      actualComment = parts.slice(1).join('|~|'); // In case comment itself has |~|
+    }
+    
+    const action = actualComment || type;
     const dateInfo = formatDate(reminder.date);
     
     return {
       time: timeStr,
       action: action,
+      type: type,
       dateInfo: dateInfo,
     };
   };
@@ -434,10 +444,19 @@ const RemindersScreen = () => {
           </Text>
           <View style={styles.reminderDetails}>
             <Text style={[styles.reminderTime, isInactive && styles.reminderTimeInactive]}>{display.time}</Text>
-            <Text style={[styles.reminderAction, isInactive && styles.reminderActionInactive]} numberOfLines={2}>
-              {display.action}
-              {display.dateInfo && ` - ${display.dateInfo}`}
+            <Text style={[styles.reminderType, isInactive && styles.reminderTypeInactive]} numberOfLines={1}>
+              {display.type}
             </Text>
+            {display.action && (
+              <Text style={[styles.reminderAction, isInactive && styles.reminderActionInactive]} numberOfLines={2}>
+                {display.action}
+              </Text>
+            )}
+            {display.dateInfo && (
+              <Text style={[styles.reminderDateInfo, isInactive && styles.reminderDateInfoInactive]}>
+                {display.dateInfo}
+              </Text>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -623,12 +642,29 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontFamily: 'futura',
   },
+  reminderType: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#377473',
+    marginBottom: 4,
+    fontFamily: 'futura',
+    textAlign: 'right',
+  },
   reminderAction: {
     fontSize: 14,
     fontWeight: '400',
     color: '#666666',
     fontFamily: 'futura',
     textAlign: 'right',
+    marginBottom: 2,
+  },
+  reminderDateInfo: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#999999',
+    fontFamily: 'futura',
+    textAlign: 'right',
+    fontStyle: 'italic',
   },
   emptyState: {
     flex: 1,
@@ -666,8 +702,14 @@ const styles = StyleSheet.create({
   reminderTimeInactive: {
     color: '#CCCCCC',
   },
+  reminderTypeInactive: {
+    color: '#AAAAAA',
+  },
   reminderActionInactive: {
     color: '#AAAAAA',
+  },
+  reminderDateInfoInactive: {
+    color: '#CCCCCC',
   },
 });
 
