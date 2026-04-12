@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../utils/colors';
 
 const FilterModal = ({ visible, onClose, selectedFilter, onSelectFilter }) => {
-  const filters = ['Today', 'This week', 'Last week', 'All clients'];
+  const filters = ['Today', 'This week', 'Last week'/*, 'All clients'*/];
 
   const handleFilterSelect = (filter) => {
     onSelectFilter(filter);

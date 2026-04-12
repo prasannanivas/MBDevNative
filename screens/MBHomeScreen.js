@@ -525,7 +525,7 @@ const MBHomeScreen = () => {
           ))
         ) : !upcomingIntroCall ? (
           <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>You have no client intro calls scheduled for {selectedFilter === 'All clients' ? 'today' : selectedFilter.toLowerCase()}</Text>
+            <Text style={styles.emptyFeaturedText}>You have no client intro calls scheduled for {selectedFilter === 'Today' ? 'today' : selectedFilter.toLowerCase()}</Text>
           </View>
         ) : null}
 
