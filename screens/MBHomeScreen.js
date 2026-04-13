@@ -19,7 +19,7 @@ import COLORS from '../utils/colors';
 import { formatPhoneNumber } from '../utils/phoneFormatUtils';
 import { getRelativeTime } from '../utils/dateUtils';
 import ReminderModal from '../components/ReminderModal';
-import FilterModal from '../components/FilterModal';
+// import FilterModal from '../components/FilterModal'; // Using inline filters now
 import Header from '../components/Header';
 import ClientCard from '../components/ClientCard';
 import CallButtonIcon from '../components/icons/CallButtonIcon';
@@ -35,7 +35,7 @@ const MBHomeScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('Today');
-  const [showFilterModal, setShowFilterModal] = useState(false);
+  // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [calledClients, setCalledClients] = useState(new Set());
@@ -406,12 +406,24 @@ const MBHomeScreen = () => {
 
         <View style={styles.timeFilterRow}>
           <Text style={styles.timeSlot}>CALLS</Text>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowFilterModal(true)}
-          >
-            <Text style={styles.filterButtonText}>{selectedFilter}</Text>
-          </TouchableOpacity>
+          <View style={styles.inlineFilterButtons}>
+            <TouchableOpacity
+              style={[styles.inlineFilterButton, selectedFilter === 'Today' && styles.inlineFilterButtonActive]}
+              onPress={() => setSelectedFilter('Today')}
+            >
+              <Text style={[styles.inlineFilterButtonText, selectedFilter === 'Today' && styles.inlineFilterButtonTextActive]}>
+                Today
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.inlineFilterButton, selectedFilter === 'This week' && styles.inlineFilterButtonActive]}
+              onPress={() => setSelectedFilter('This week')}
+            >
+              <Text style={[styles.inlineFilterButtonText, selectedFilter === 'This week' && styles.inlineFilterButtonTextActive]}>
+                This Week
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {remainingCalls.length > 0 ? (
@@ -559,7 +571,7 @@ const MBHomeScreen = () => {
         )}
       </ScrollView>
 
-      {/* Filter Modal */}
+      {/* Filter Modal - Commented out, using inline filters now
       <FilterModal
         visible={showFilterModal}
         onClose={() => setShowFilterModal(false)}
@@ -569,6 +581,7 @@ const MBHomeScreen = () => {
           setShowFilterModal(false);
         }}
       />
+      */}
 
       {/* Reminder Modal */}
       {selectedClient && (
@@ -631,6 +644,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#797979',
     fontFamily: 'futura',
+  },
+  inlineFilterButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inlineFilterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  inlineFilterButtonActive: {
+    backgroundColor: '#377473',
+  },
+  inlineFilterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#377473',
+    fontFamily: 'futura',
+  },
+  inlineFilterButtonTextActive: {
+    color: '#FFFFFF',
   },
   callItem: {
     marginBottom: 8,

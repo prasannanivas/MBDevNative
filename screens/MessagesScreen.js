@@ -16,7 +16,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 import { getRelativeTime } from '../utils/dateUtils';
-import MessageFilterModal from '../components/MessageFilterModal';
+// import MessageFilterModal from '../components/MessageFilterModal'; // Using inline filters now
 import ChatModal from '../components/ChatModal';
 import Header from '../components/Header';
 import ClientCard from '../components/ClientCard';
@@ -30,7 +30,7 @@ const MessagesScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
-  const [showFilterModal, setShowFilterModal] = useState(false);
+  // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
 
@@ -122,9 +122,9 @@ const MessagesScreen = () => {
     setShowChatModal(true);
   };
 
-  const handleFilterPress = () => {
-    setShowFilterModal(true);
-  };
+  // const handleFilterPress = () => {
+  //   setShowFilterModal(true);
+  // }; // Using inline filters now
 
   const renderConversationItem = ({ item }) => {
     const isUnread = item.unreadCount > 0;
@@ -154,7 +154,7 @@ const MessagesScreen = () => {
           <TouchableOpacity
             onPress={() => handleConversationPress(item)}
           >
-            <MessageIcon width={43} height={43} isUnread={isUnread} />
+            <MessageIcon width={43} height={43} isUnread={isUnread} activeFilter={selectedFilter} />
           </TouchableOpacity>
 
           {/* Alert Icon */}
@@ -196,24 +196,27 @@ const MessagesScreen = () => {
         keyExtractor={(item) => item._id}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
-            
             <View style={styles.titleContainer}>
               <Text style={styles.sectionTitle}>MESSAGES</Text>
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={handleFilterPress}
-              >
-                <Text style={styles.filterButtonText}>{selectedFilter}</Text>
-              </TouchableOpacity>
+              <View style={styles.inlineFilterButtons}>
+                <TouchableOpacity
+                  style={[styles.inlineFilterButton, selectedFilter === 'All' && styles.inlineFilterButtonActive]}
+                  onPress={() => setSelectedFilter('All')}
+                >
+                  <Text style={[styles.inlineFilterButtonText, selectedFilter === 'All' && styles.inlineFilterButtonTextActive]}>
+                    All
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inlineFilterButton, selectedFilter === 'Unread' && styles.inlineFilterButtonActive]}
+                  onPress={() => setSelectedFilter('Unread')}
+                >
+                  <Text style={[styles.inlineFilterButtonText, selectedFilter === 'Unread' && styles.inlineFilterButtonTextActive]}>
+                    Unread
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            {/* <View style={styles.leftSection}>
-              <TouchableOpacity
-                style={[styles.unreadButton, selectedFilter === 'Unread' && styles.unreadButtonActive]}
-                onPress={() => setSelectedFilter(selectedFilter === 'Unread' ? 'All' : 'Unread')}
-              >
-                <Text style={[styles.unreadButtonText, selectedFilter === 'Unread' && styles.unreadButtonTextActive]}>Unread</Text>
-              </TouchableOpacity>
-            </View> */}
           </View>
         }
         ListEmptyComponent={renderEmptyState}
@@ -227,7 +230,7 @@ const MessagesScreen = () => {
         }
       />
 
-      {/* Filter Modal */}
+      {/* Filter Modal - Commented out, using inline filters now
       <MessageFilterModal
         visible={showFilterModal}
         onClose={() => setShowFilterModal(false)}
@@ -237,6 +240,7 @@ const MessagesScreen = () => {
           setShowFilterModal(false);
         }}
       />
+      */}
 
       {/* Chat Modal */}
       {selectedConversation && (
@@ -272,20 +276,14 @@ const styles = StyleSheet.create({
   headerContainer: {
     backgroundColor: '#f8f9fa',
     paddingHorizontal: 16,
-    paddingBottom: 2,
+    paddingBottom: 16,
     paddingTop: 20,
-    display: 'flex',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  leftSection: {
-    marginBottom: 12,
   },
   titleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
   },
   sectionTitle: {
     color: "#797979",
@@ -293,44 +291,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'futura',
   },
-  unreadButton: {
-    borderColor: "#377473",
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 788,
-    alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+  inlineFilterButtons: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  unreadButtonActive: {
-    backgroundColor: COLORS.primary,
-  },
-  unreadButtonText: {
-    fontFamily: 'futura',
-    fontWeight: '700',
-    fontSize: 14,
-    color: '#377473',
-  },
-  unreadButtonTextActive: {
-    color: COLORS.white,
-  },
-  filterButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  inlineFilterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
   },
-  filterButtonText: {
-    color: '#FDFDFD',
-    fontSize: 12,
+  inlineFilterButtonActive: {
+    backgroundColor: '#377473',
+  },
+  inlineFilterButtonText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#377473',
     fontFamily: 'futura',
+  },
+  inlineFilterButtonTextActive: {
+    color: '#FFFFFF',
   },
   conversationCard: {
     backgroundColor: '#ffffff',
