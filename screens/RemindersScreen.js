@@ -440,23 +440,12 @@ const RemindersScreen = () => {
         <View style={styles.reminderContent}>
           <Text style={[styles.clientName, isInactive && styles.clientNameInactive]}>
             {item.clientName}
-            {isInactive && <Text style={styles.inactiveLabel}> (Inactive)</Text>}
           </Text>
           <View style={styles.reminderDetails}>
             <Text style={[styles.reminderTime, isInactive && styles.reminderTimeInactive]}>{display.time}</Text>
             <Text style={[styles.reminderType, isInactive && styles.reminderTypeInactive]} numberOfLines={1}>
-              {display.type}
+              {display.action || display.type}
             </Text>
-            {display.action && (
-              <Text style={[styles.reminderAction, isInactive && styles.reminderActionInactive]} numberOfLines={2}>
-                {display.action}
-              </Text>
-            )}
-            {display.dateInfo && (
-              <Text style={[styles.reminderDateInfo, isInactive && styles.reminderDateInfoInactive]}>
-                {display.dateInfo}
-              </Text>
-            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -490,7 +479,7 @@ const RemindersScreen = () => {
       
       {/* Title and Filter Buttons */}
       <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>REMINDERS</Text>
+        <Text style={styles.sectionTitle}>HISTORY</Text>
         <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[styles.filterButton, selectedFilter === 'Upcoming' && styles.filterButtonActive]}
@@ -591,18 +580,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#377473',
   },
   filterButtonActive: {
-    backgroundColor: '#2E2E2E',
-    borderColor: '#2E2E2E',
+    backgroundColor: '#377473',
+    borderColor: '#377473',
   },
   filterButtonText: {
     fontSize: 10,
     fontWeight: '500',
-    color: '#666666',
+    color: '#377473',
     fontFamily: 'futura',
   },
   filterButtonTextActive: {
@@ -617,7 +606,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   sectionHeaderText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
     color: '#797979',
     letterSpacing: 1,
@@ -653,16 +642,16 @@ const styles = StyleSheet.create({
     maxWidth: '60%',
   },
   reminderTime: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#999999',
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#797979',
     marginBottom: 4,
     fontFamily: 'futura',
   },
   reminderType: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#377473',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4D4D4D',
     marginBottom: 4,
     fontFamily: 'futura',
     textAlign: 'right',
