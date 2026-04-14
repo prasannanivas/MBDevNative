@@ -11,7 +11,10 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
@@ -73,6 +76,11 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
   const [customDay, setCustomDay] = useState('');
   const [customMonth, setCustomMonth] = useState('');
   const [customYear, setCustomYear] = useState('');
+  const [customDateValue, setCustomDateValue] = useState(new Date());
+  
+  // Android date picker states
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState('date');
 
   const dateOptions = ['Today', 'Tomorrow', 'Next week', 'Next month', 'Custom'];
   
@@ -145,18 +153,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
 
   const handleCustomDateNext = () => {
     Keyboard.dismiss();
-    if (!customDay || !customMonth || !customYear) {
-      Alert.alert('Error', 'Please enter day, month, and year');
-      return;
-    }
-    
-    const date = new Date(parseInt(customYear), parseInt(customMonth) - 1, parseInt(customDay), 9, 0, 0, 0);
-    if (isNaN(date.getTime())) {
-      Alert.alert('Error', 'Invalid date');
-      return;
-    }
-    
-    setSelectedDate(date);
+    setSelectedDate(customDateValue);
     setStep(2);
   };
 
@@ -218,6 +215,9 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
     setCustomDay('');
     setCustomMonth('');
     setCustomYear('');
+    setCustomDateValue(new Date());
+    setShowDatePicker(false);
+    setDatePickerMode('date');
     setInactiveComment('');
     onClose();
   };
@@ -431,34 +431,46 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
         </View>
       </View>
 
-      <View style={styles.dateInputsRow}>
-        <TextInput
-          style={styles.dateInput}
-          placeholder="Day"
-          placeholderTextColor="#999"
-          keyboardType="number-pad"
-          maxLength={2}
-          value={customDay}
-          onChangeText={setCustomDay}
-        />
-        <TextInput
-          style={styles.dateInput}
-          placeholder="Month"
-          placeholderTextColor="#999"
-          keyboardType="number-pad"
-          maxLength={2}
-          value={customMonth}
-          onChangeText={setCustomMonth}
-        />
-        <TextInput
-          style={styles.dateInput}
-          placeholder="Year"
-          placeholderTextColor="#999"
-          keyboardType="number-pad"
-          maxLength={4}
-          value={customYear}
-          onChangeText={setCustomYear}
-        />
+      <View style={styles.datePickerContainer}>
+        {Platform.OS === 'ios' ? (
+          <DateTimePicker
+            value={customDateValue}
+            mode="date"
+            display="spinner"
+            onChange={(event, date) => {
+              if (date) {
+                setCustomDateValue(date);
+              }
+            }}
+            textColor="#202020"
+            style={{ transform: [{ scaleY: 0.9 }, { scaleX: 0.9 }] }}
+          />
+        ) : (
+          <>
+            <Text style={styles.dateTimeLabel}>Select Date</Text>
+            <TouchableOpacity 
+              style={styles.dateTimeButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={styles.dateTimeButtonText}>
+                {customDateValue.toLocaleDateString()}
+              </Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={customDateValue}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  if (event.type === 'set' && date) {
+                    setCustomDateValue(date);
+                  }
+                  setShowDatePicker(false);
+                }}
+              />
+            )}
+          </>
+        )}
       </View>
 
       <View style={styles.bottomButtons}>
@@ -668,7 +680,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   customLabelText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#FFFFFF',
     fontWeight: '700',
     fontFamily: 'futura',
@@ -712,6 +724,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 24,
+  },
+  datePickerContainer: {
+    width: '100%',
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  dateTimeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#202020',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  dateTimeButton: {
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#377473',
+    alignItems: 'center',
+  },
+  dateTimeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#202020',
+    textAlign: 'center',
   },
   dateInput: {
     flex: 1,
