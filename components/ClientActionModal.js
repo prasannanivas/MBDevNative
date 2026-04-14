@@ -28,6 +28,9 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
 
   useEffect(() => {
     if (visible) {
+      // Clear previous reminder first to avoid flash
+      setLastReminder(null);
+      
       // Animate in
       Animated.parallel([
         Animated.timing(backdropOpacity, {
@@ -61,8 +64,11 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
           useNativeDriver: true,
         }),
       ]).start();
+      
+      // Clear reminder when closing to prevent flash when reopening
+      setLastReminder(null);
     }
-  }, [visible]);
+  }, [visible, client?._id]);
 
   const fetchLastReminder = async () => {
     try {
