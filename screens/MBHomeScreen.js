@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#797979",
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
     fontFamily: 'futura',
     paddingLeft: 4,
