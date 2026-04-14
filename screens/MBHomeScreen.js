@@ -32,6 +32,7 @@ const MBHomeScreen = () => {
   const [realtorNewClients, setRealtorNewClients] = useState([]);
   const [clientIntros, setClientIntros] = useState([]);
   const [recentDocuments, setRecentDocuments] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('Today');
@@ -42,6 +43,7 @@ const MBHomeScreen = () => {
 
   useEffect(() => {
     fetchCallRequests();
+    fetchPendingInvites();
   }, [selectedFilter]);
 
   const fetchCallRequests = async () => {
@@ -197,9 +199,39 @@ const MBHomeScreen = () => {
     }
   };
 
+  const fetchPendingInvites = async () => {
+    console.log('🔄 [MBHomeScreen] fetchPendingInvites called');
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/admin/invites/pending/${broker._id}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('fetchPendingInvites: received data:', data);
+        
+        // Sort by createdAt descending (most recent first) and take only the first 5
+        const sortedInvites = (data.invites || [])
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 5);
+        
+        setPendingInvites(sortedInvites);
+      }
+    } catch (error) {
+      console.error('Error fetching pending invites:', error);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchCallRequests();
+    fetchPendingInvites();
   };
 
   const handleCall = async (client) => {
@@ -260,7 +292,7 @@ const MBHomeScreen = () => {
       >
         {/* Call Button */}
         <TouchableOpacity onPress={() => handleCall(item)}>
-          <CallButtonIcon />
+          <CallButtonIcon bgColor="#F0913A" />
         </TouchableOpacity>
 
         {/* Alert/Reminder Button */}
@@ -296,10 +328,8 @@ const MBHomeScreen = () => {
     return callDate >= today;
   };
 
-  // Only feature the first call if it's in the future
-  const upcomingCall = (callRequests.length > 0 && isFutureCall(callRequests[0])) ? callRequests[0] : null;
   // Remaining calls include all but the featured one (if featured)
-  const remainingCalls = upcomingCall ? callRequests.slice(1) : callRequests;
+  const remainingCalls =  callRequests;
   
   // Featured calls for other sections
   const displayedRealtorClients = realtorNewClients.slice(0, 5); // Always show top 5 only
@@ -373,31 +403,23 @@ const MBHomeScreen = () => {
         }
       >
         {/* CALL REQUESTED SECTION */}
-        <View style={[styles.titleContainer, { backgroundColor: upcomingCall ? '#F0913A4D' : '#4CAF504D' }]}>
+
+        {remainingCalls.length > 0 ? (
+          <>
+            <View style={[styles.titleContainer, { backgroundColor: remainingCalls.length > 0 ? '#F0913A4D' : '#4CAF504D' }]}>
           <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
         </View>
-        
-        {upcomingCall ? (
+          
           <View style={[styles.featuredCallSection, { backgroundColor: '#F0913A4D' }]}>
-            <ClientCard
-              clientName={`${upcomingCall.firstName || ''} ${upcomingCall.lastName || ''}`.trim()}
-              status={upcomingCall.priority === 'high' ? 'Priority' : 'Active'}
-              showStatus={false}
-              showInitials={true}
-              timeRange={getCallTimeDisplay(upcomingCall)}
-              isInactive={upcomingCall.mbActivityStatus === 'Inactive'}
-              onPress={() => handleClientPress(upcomingCall)}
-            >
-              <TouchableOpacity onPress={() => handleCall(upcomingCall)}>
-                <CallButtonIcon bgColor={"#2271B1"} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleReminder(upcomingCall)}>
-                <AlertButtonIcon />
-              </TouchableOpacity>
-            </ClientCard>
+            {remainingCalls.map((item) => (
+              <View key={item._id} style={styles.callItem}>
+                {renderCallRequestCard({ item })}
+              </View>
+            ))}
           </View>
+          </>
         ) : (
-          <View style={[styles.emptyFeaturedSection, { backgroundColor: '#4CAF504D' }]}>
+          <View style={[styles.emptyFeaturedSection, { backgroundColor: '#CDDCDC' }]}>
             <View style={styles.emptyFeaturedCardInner}>
               <Text style={styles.emptyFeaturedText}>You have no calls requested</Text>
             </View>
@@ -425,20 +447,6 @@ const MBHomeScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-
-        {remainingCalls.length > 0 ? (
-          remainingCalls.map((item) => (
-            <View key={item._id} style={styles.callItem}>
-              {renderCallRequestCard({ item })}
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>
-              You have no calls scheduled for {selectedFilter === 'All clients' ? 'all time' : selectedFilter.toLowerCase()}
-            </Text>
-          </View>
-        )}
 
         {/* REALTOR - NEW CLIENT SECTION */}
         <View style={styles.titleContainer}>
@@ -569,6 +577,46 @@ const MBHomeScreen = () => {
             <Text style={styles.emptyFeaturedText}>No new documents pending review</Text>
           </View>
         )}
+
+        {/* PENDING INVITES SECTION */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>PENDING INVITES</Text>
+        </View>
+
+        {pendingInvites.length > 0 ? (
+          pendingInvites.map((invite) => (
+            <View key={invite._id} style={styles.inviteItem}>
+              <View style={styles.inviteContent}>
+                <View style={styles.inviteHeader}>
+                  <Text style={styles.inviteRealtorName}>{invite.realtorName}</Text>
+                  <View style={styles.inviteStatusBadge}>
+                    <Text style={styles.inviteStatusBadgeText}>PENDING</Text>
+                  </View>
+                </View>
+                <Text style={styles.inviteClientName}>→ {invite.clientName}</Text>
+                {invite.clientEmail && (
+                  <Text style={styles.inviteDetail}>{invite.clientEmail}</Text>
+                )}
+                {invite.clientPhone && (
+                  <Text style={styles.inviteDetail}>{invite.clientPhone}</Text>
+                )}
+              </View>
+              <Text style={styles.inviteTime}>
+                {new Date(invite.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyFeaturedCard}>
+            <Text style={styles.emptyFeaturedText}>No pending invites</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Filter Modal - Commented out, using inline filters now
@@ -592,6 +640,7 @@ const MBHomeScreen = () => {
             setSelectedClient(null);
           }}
           client={selectedClient}
+          sourceScreen="MBMain"
           onSuccess={() => {
             console.log('🔄 [MBHomeScreen] onSuccess called - refreshing client list');
             // Refresh the client list after setting reminder or inactive status
@@ -650,10 +699,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   inlineFilterButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 20,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
   },
@@ -661,8 +710,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#377473',
   },
   inlineFilterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '500',
     color: '#377473',
     fontFamily: 'futura',
   },
@@ -674,7 +723,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#797979",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     fontFamily: 'futura',
     paddingLeft: 4,
@@ -811,8 +860,7 @@ const styles = StyleSheet.create({
   },
   emptyFeaturedSection: {
     paddingHorizontal: 24,
-    paddingTop: 0,
-    paddingBottom: 16,
+    paddingVertical: 16,
   },
   emptyFeaturedCard: {
     backgroundColor: COLORS.white,
@@ -830,7 +878,7 @@ const styles = StyleSheet.create({
   },
   emptyFeaturedCardInner: {
     backgroundColor: COLORS.white,
-    paddingVertical: 40,
+    paddingVertical: 20,
     paddingHorizontal: 24,
     borderRadius: 12,
     alignItems: 'center',
@@ -938,6 +986,64 @@ const styles = StyleSheet.create({
     fontFamily: 'futura',
   },
   documentTime: {
+    fontSize: 12,
+    color: COLORS.gray,
+    fontFamily: 'futura',
+  },
+  inviteItem: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 24,
+    marginBottom: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inviteContent: {
+    marginBottom: 8,
+  },
+  inviteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  inviteRealtorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.black,
+    fontFamily: 'futura',
+  },
+  inviteStatusBadge: {
+    backgroundColor: '#F0913A',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  inviteStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.white,
+    fontFamily: 'futura',
+  },
+  inviteClientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.slate,
+    marginBottom: 4,
+    fontFamily: 'futura',
+  },
+  inviteDetail: {
+    fontSize: 14,
+    color: COLORS.gray,
+    marginTop: 2,
+    fontFamily: 'futura',
+  },
+  inviteTime: {
     fontSize: 12,
     color: COLORS.gray,
     fontFamily: 'futura',

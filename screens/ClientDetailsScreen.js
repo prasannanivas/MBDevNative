@@ -339,10 +339,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.black,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#797979',
     marginBottom: 15,
+    fontFamily: 'futura',
   },
   infoRow: {
     flexDirection: 'row',

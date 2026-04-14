@@ -50,6 +50,7 @@
         "appleTeamId": "QH3NGA2YS4"
       },
       "android": {
+        "serviceAccountKeyPath": "./roost-drive-service-key.json",
         "track": "production",
         "releaseStatus": "completed"
       }

@@ -18,6 +18,7 @@ import COLORS from '../utils/colors';
 import { getRelativeTime } from '../utils/dateUtils';
 // import MessageFilterModal from '../components/MessageFilterModal'; // Using inline filters now
 import ChatModal from '../components/ChatModal';
+import ReminderModal from '../components/ReminderModal';
 import Header from '../components/Header';
 import ClientCard from '../components/ClientCard';
 import MessageIcon from '../components/icons/MessageIcon';
@@ -33,6 +34,8 @@ const MessagesScreen = () => {
   // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
 
   // Fetch conversations on screen focus
   useFocusEffect(
@@ -122,6 +125,11 @@ const MessagesScreen = () => {
     setShowChatModal(true);
   };
 
+  const handleReminder = (client) => {
+    setSelectedClient(client);
+    setShowReminderModal(true);
+  };
+
   // const handleFilterPress = () => {
   //   setShowFilterModal(true);
   // }; // Using inline filters now
@@ -159,7 +167,7 @@ const MessagesScreen = () => {
 
           {/* Alert Icon */}
           <TouchableOpacity
-            onPress={() => {/* Handle notification */}}
+            onPress={() => handleReminder(participant)}
           >
             <AlertIcon width={43} height={43} />
           </TouchableOpacity>
@@ -255,6 +263,22 @@ const MessagesScreen = () => {
           conversation={selectedConversation}
         />
       )}
+
+      {/* Reminder Modal */}
+      {selectedClient && (
+        <ReminderModal
+          visible={showReminderModal}
+          onClose={() => {
+            setShowReminderModal(false);
+            setSelectedClient(null);
+          }}
+          client={selectedClient}
+          sourceScreen="Messages"
+          onSuccess={() => {
+            fetchConversations();
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -287,7 +311,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#797979",
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '700',
     fontFamily: 'futura',
   },
@@ -296,10 +320,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   inlineFilterButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 20,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
   },
@@ -307,8 +331,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#377473',
   },
   inlineFilterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '500',
     color: '#377473',
     fontFamily: 'futura',
   },

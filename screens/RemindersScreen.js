@@ -488,8 +488,10 @@ const RemindersScreen = () => {
     <View style={styles.container}>
       <Header />
       
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
+      {/* Title and Filter Buttons */}
+      <View style={styles.titleContainer}>
+        <Text style={styles.sectionTitle}>REMINDERS</Text>
+        <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[styles.filterButton, selectedFilter === 'Upcoming' && styles.filterButtonActive]}
           onPress={() => setSelectedFilter('Upcoming')}
@@ -509,6 +511,7 @@ const RemindersScreen = () => {
             Past
           </Text>
         </TouchableOpacity>
+      </View>
       </View>
 
       <SectionList
@@ -548,6 +551,7 @@ const RemindersScreen = () => {
           fetchAndCacheReminders();
         }}
         client={modalClientData}
+        sourceScreen="MBMain"
         onSuccess={() => fetchAndCacheReminders()}
       />
     </View>
@@ -559,6 +563,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#F5F5F5',
+  },
+  sectionTitle: {
+    color: "#797979",
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'futura',
+    paddingLeft: 4,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -566,13 +585,11 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
     gap: 12,
   },
   filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 20,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -583,7 +600,7 @@ const styles = StyleSheet.create({
     borderColor: '#2E2E2E',
   },
   filterButtonText: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: '500',
     color: '#666666',
     fontFamily: 'futura',
@@ -601,8 +618,8 @@ const styles = StyleSheet.create({
   },
   sectionHeaderText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#999999',
+    fontWeight: '700',
+    color: '#797979',
     letterSpacing: 1,
     fontFamily: 'futura',
   },

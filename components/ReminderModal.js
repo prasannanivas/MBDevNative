@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,25 +10,61 @@ import {
   TextInput,
   Keyboard,
   TouchableWithoutFeedback,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 
-const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
+const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MBMain' }) => {
   const { broker, authToken } = useAuth();
   const [step, setStep] = useState(1);
+
+  // Animation values
+  const slideAnim = useRef(new Animated.Value(600)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       console.log('🟡 [ReminderModal] Opened — client._id:', client?._id);
       console.log('🟡 [ReminderModal] Opened — full client:', JSON.stringify(client));
       console.log('🟡 [ReminderModal] Opened — client.mbActivityStatus:', client?.mbActivityStatus);
+      
+      // Animate in
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Animate out
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 600,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [visible, client]); // 1: Date, 2: Custom Date, 3: Type, 4: Inactive Confirmation
+  }, [visible, client]); // 1: Type (Call/Message + Realtor/Client), 2: Date, 3: Custom Date, 4: Inactive Confirmation
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
+  const [contactMethod, setContactMethod] = useState(sourceScreen === 'Messages' ? 'Message' : 'Call');
+  const [contactTarget, setContactTarget] = useState('Client');
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inactiveComment, setInactiveComment] = useState('');
@@ -39,6 +75,22 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
   const [customYear, setCustomYear] = useState('');
 
   const dateOptions = ['Today', 'Tomorrow', 'Next week', 'Next month', 'Custom'];
+  
+  // Check if client has a realtor
+  const hasRealtor = client?.realtorInfo && Object.keys(client.realtorInfo).length > 0;
+  
+  // Build the selectedType from contactMethod and contactTarget
+  const buildSelectedType = () => {
+    return `${contactMethod} ${contactTarget.toLowerCase()}`;
+  };
+  
+  // Reset defaults based on source screen when modal opens
+  useEffect(() => {
+    if (visible) {
+      setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
+      setContactTarget('Client');
+    }
+  }, [visible, sourceScreen]);
   
   // Filter type options based on whether client has a realtor assigned
   const getTypeOptions = () => {
@@ -65,7 +117,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
   const handleDateSelect = (option) => {
     Keyboard.dismiss();
     if (option === 'Custom') {
-      setStep(2);
+      setStep(3);
       return;
     }
     
@@ -88,7 +140,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
         break;
     }
     setSelectedDate(date);
-    setStep(3);
+    setStep(2);
   };
 
   const handleCustomDateNext = () => {
@@ -105,11 +157,12 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
     }
     
     setSelectedDate(date);
-    setStep(3);
+    setStep(2);
   };
 
   const handleSave = async () => {
     Keyboard.dismiss();
+    const selectedType = buildSelectedType();
     if (!selectedDate || !selectedType || !client?._id || !authToken) {
       Alert.alert('Error', 'Please complete all fields');
       return;
@@ -159,6 +212,8 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
     setStep(1);
     setSelectedDate(null);
     setSelectedType(null);
+    setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
+    setContactTarget('Client');
     setComment('');
     setCustomDay('');
     setCustomMonth('');
@@ -172,7 +227,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
     console.log('🔴 [ReminderModal] Client:', client);
     console.log('🔴 [ReminderModal] Current status:', client?.mbActivityStatus);
     Keyboard.dismiss();
-    setStep(4);
+    setStep(5);
   };
 
   const handleToggleInactive = async () => {
@@ -262,12 +317,105 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
       </TouchableOpacity>
 
       <View style={styles.bottomButtons}>
-        <TouchableOpacity onPress={handleClose}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </View>
   );};
+
+  const renderMainStep = () => {
+    return (
+      <View style={styles.modalContent}>
+        <Text style={styles.title}>Set reminder - Date</Text>
+
+        {/* Date Display Row */}
+        <View style={styles.customDateHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+          <View style={styles.customLabel}>
+            <Text style={styles.customLabelText}>{getDateDisplayText()}</Text>
+          </View>
+        </View>
+
+        {/* Call / Message Row */}
+        <View style={styles.contactMethodRow}>
+          <TouchableOpacity 
+            style={[styles.contactOption, contactMethod === 'Call' && styles.contactOptionSelected]} 
+            onPress={() => setContactMethod('Call')}
+          >
+            {contactMethod === 'Call' && <Text style={styles.checkmark}>✓</Text>}
+            <Text style={[styles.contactOptionText, contactMethod === 'Call' && styles.contactOptionTextSelected]}>
+              Call
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.contactOption, contactMethod === 'Message' && styles.contactOptionSelected]} 
+            onPress={() => setContactMethod('Message')}
+          >
+            {contactMethod === 'Message' && <Text style={styles.checkmark}>✓</Text>}
+            <Text style={[styles.contactOptionText, contactMethod === 'Message' && styles.contactOptionTextSelected]}>
+              Message
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Realtor / Client Row (if has realtor) */}
+        {hasRealtor && (
+          <View style={styles.contactMethodRow}>
+            <TouchableOpacity 
+              style={[styles.contactOption, contactTarget === 'Realtor' && styles.contactOptionSelected]} 
+              onPress={() => setContactTarget('Realtor')}
+            >
+              {contactTarget === 'Realtor' && <Text style={styles.checkmark}>✓</Text>}
+              <Text style={[styles.contactOptionText, contactTarget === 'Realtor' && styles.contactOptionTextSelected]}>
+                Realtor
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.contactOption, contactTarget === 'Client' && styles.contactOptionSelected]} 
+              onPress={() => setContactTarget('Client')}
+            >
+              {contactTarget === 'Client' && <Text style={styles.checkmark}>✓</Text>}
+              <Text style={[styles.contactOptionText, contactTarget === 'Client' && styles.contactOptionTextSelected]}>
+                Client
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Comment Input */}
+        <TextInput
+          style={styles.commentInput}
+          placeholder="Add a comment here"
+          placeholderTextColor="#999"
+          multiline
+          numberOfLines={4}
+          value={comment}
+          onChangeText={setComment}
+        />
+
+        {/* Bottom Buttons */}
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.saveButton} 
+            onPress={handleSave}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
 
   const renderCustomDateStep = () => (
@@ -314,8 +462,8 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
       </View>
 
       <View style={styles.bottomButtons}>
-        <TouchableOpacity onPress={handleClose}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.nextButton} onPress={handleCustomDateNext}>
           <Text style={styles.nextButtonText}>Next</Text>
@@ -345,62 +493,6 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
       year: 'numeric'
     });
   };
-
-  const renderTypeStep = () => (
-    <View style={styles.modalContent}>
-      <Text style={styles.title}>Set reminder - Type</Text>
-
-      <View style={styles.customDateHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
-        <View style={styles.customLabel}>
-          <Text style={styles.customLabelText}>{getDateDisplayText()}</Text>
-        </View>
-      </View>
-
-      <View style={styles.optionsList}>
-        {typeOptions.map((option) => (
-          <TouchableOpacity
-            key={option}
-            style={[styles.option, selectedType === option && styles.optionSelected]}
-            onPress={() => setSelectedType(option)}
-          >
-            <Text style={[styles.optionText, selectedType === option && styles.optionTextSelected]}>
-              {option}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        
-        <TextInput
-          style={styles.commentInput}
-          placeholder="Add a comment here"
-          placeholderTextColor="#999"
-          multiline
-          numberOfLines={4}
-          value={comment}
-          onChangeText={setComment}
-        />
-      </View>
-
-      <View style={styles.bottomButtons}>
-        <TouchableOpacity onPress={handleClose}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.saveButton} 
-          onPress={handleSave}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   const renderInactiveConfirmation = () => {
     const isCurrentlyInactive = client?.mbActivityStatus === 'Inactive';
@@ -446,21 +538,37 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={handleClose}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.modalContainer}>
+      <View style={styles.overlay}>
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <Animated.View 
+            style={[
+              styles.backdropOverlay, 
+              { opacity: backdropOpacity }
+            ]} 
+          />
+        </TouchableWithoutFeedback>
+
+        <Animated.View 
+          style={[
+            styles.modalContainer,
+            {
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View>
               {step === 1 && renderDateStep()}
-              {step === 2 && renderCustomDateStep()}
-              {step === 3 && renderTypeStep()}
-              {step === 4 && renderInactiveConfirmation()}
+              {step === 2 && renderMainStep()}
+              {step === 3 && renderCustomDateStep()}
+              {step === 5 && renderInactiveConfirmation()}
             </View>
           </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
+        </Animated.View>
+      </View>
     </Modal>
   );
 };
@@ -468,18 +576,32 @@ const ReminderModal = ({ visible, onClose, client, onSuccess }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdropOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalContainer: {
-    width: '85%',
-    maxWidth: 400,
+    backgroundColor: '#F5F5F5',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    maxHeight: '90%',
+    marginHorizontal: 16,
+    marginBottom: 40,
+    overflow: 'hidden',
   },
   modalContent: {
     backgroundColor: '#F5F5F5',
-    borderRadius: 24,
+    borderRadius: 0,
     padding: 32,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 14,
@@ -494,12 +616,12 @@ const styles = StyleSheet.create({
   },
   option: {
     width: '100%',
-    paddingVertical: 13,
+    paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 327,
     marginBottom: 12,
     backgroundColor: 'transparent',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#377473',
     alignItems: 'center',
   },
@@ -507,7 +629,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#377473',
   },
   optionText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#377473',
     fontWeight: '700',
     fontFamily: 'futura',
@@ -524,31 +646,67 @@ const styles = StyleSheet.create({
   backButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 32,
-    borderWidth: 2,
+    borderRadius: 327,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
+    alignItems: 'center',
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#377473',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   customLabel: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 32,
+    borderRadius: 327,
     backgroundColor: '#377473',
     marginLeft: 12,
     alignItems: 'center',
   },
   customLabelText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFFFFF',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+    fontWeight: '700',
+    fontFamily: 'futura',
+  },
+  contactMethodRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  contactOption: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    borderWidth: 1,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+  },
+  contactOptionSelected: {
+    backgroundColor: '#377473',
+  },
+  contactOptionText: {
+    fontSize: 12,
+    color: '#377473',
+    fontWeight: '700',
+    fontFamily: 'futura',
+  },
+  contactOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  checkmark: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginRight: 8,
   },
   dateInputsRow: {
     flexDirection: 'row',
@@ -557,10 +715,10 @@ const styles = StyleSheet.create({
   },
   dateInput: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: '#FFFFFF',
     fontSize: 16,
@@ -586,54 +744,67 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+    gap: 12,
   },
-  cancelText: {
-    fontSize: 18,
-    color: '#202020',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+  cancelButton: {
+    flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#377473',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 12,
+    color: '#377473',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   nextButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 48,
-    borderRadius: 32,
-    borderWidth: 2,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
+    alignItems: 'center',
   },
   nextButtonText: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#377473',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   saveButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 48,
-    borderRadius: 32,
-    borderWidth: 2,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
+    alignItems: 'center',
   },
   saveButtonText: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#377473',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   inactiveButton: {
     width: '100%',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 327,
-    backgroundColor: '#D2935A',
+    backgroundColor: '#F0913A',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   inactiveButtonText: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#FFFFFF',
     fontWeight: '700',
     fontFamily: 'futura',
@@ -642,7 +813,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50', // Green for "Make Active"
   },
   confirmTitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#202020',
     textAlign: 'center',
     marginBottom: 8,
@@ -657,7 +828,7 @@ const styles = StyleSheet.create({
     fontFamily: 'futura',
   },
   confirmSubtext: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#202020',
     textAlign: 'center',
     marginBottom: 24,
@@ -671,29 +842,31 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButtonConfirm: {
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 32,
-    borderWidth: 2,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 327,
+    borderWidth: 1,
     borderColor: '#377473',
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
   },
   cancelTextConfirm: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#377473',
-    fontWeight: '600',
-    fontFamily: 'Futura Book',
+    fontWeight: '700',
+    fontFamily: 'futura',
   },
   confirmYesButton: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 327,
     backgroundColor: '#D2935A',
     alignItems: 'center',
   },
   confirmYesText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '700',
     fontFamily: 'futura',

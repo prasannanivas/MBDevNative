@@ -133,9 +133,10 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionTitle: {
-    color: COLORS.black,
-    fontSize: 24,
+    color: '#797979',
+    fontSize: 14,
     fontWeight: '700',
+    fontFamily: 'futura',
     textAlign: 'left',
   },
   scrollContent: {

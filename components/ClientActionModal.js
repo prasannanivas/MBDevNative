@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  Animated,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import API_BASE_URL from '../config/api';
 import CallIcon from './icons/CallIcon';
@@ -18,6 +20,126 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
   const [showChatModal, setShowChatModal] = useState(false);
   const [conversation, setConversation] = useState(null);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [lastReminder, setLastReminder] = useState(null);
+
+  // Animation values
+  const slideAnim = useRef(new Animated.Value(600)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      // Animate in
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Fetch last reminder
+      if (client?._id && authToken) {
+        fetchLastReminder();
+      }
+    } else {
+      // Animate out
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 600,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  const fetchLastReminder = async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/admin/client/${client._id}/reminders`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const reminders = data.reminders || [];
+        if (reminders.length > 0) {
+          // Get the most recent reminder
+          const sorted = reminders.sort((a, b) => new Date(b.date) - new Date(a.date));
+          setLastReminder(sorted[0]);
+        } else {
+          setLastReminder(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching reminder:', error);
+    }
+  };
+
+  const formatReminderDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const reminderDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    const diffTime = reminderDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const formatReminderTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const parseReminderComment = (comment) => {
+    if (!comment) return '';
+    const parts = comment.split('|~|');
+    // If there's a separator, return the part after it
+    // Otherwise return the whole comment (for old format)
+    if (parts.length > 1) {
+      return parts[1] || comment; // Return comment part, or whole if empty
+    }
+    return comment; // Old format - just return as is
+  };
+
+  const parseReminderType = (comment) => {
+    if (!comment) return 'Reminder';
+    const parts = comment.split('|~|');
+    return parts[0] || 'Reminder';
+  };
 
   useEffect(() => {
     console.log('State changed - showChatModal:', showChatModal, 'conversation:', conversation?._id || 'null');
@@ -122,16 +244,28 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
       <Modal
         visible={visible && !showChatModal}
         transparent={true}
-        animationType="fade"
+        animationType="none"
         onRequestClose={onClose}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={onClose}
-        >
-          <View style={styles.modalContainer}>
-            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={onClose}>
+            <Animated.View 
+              style={[
+                styles.backdropOverlay, 
+                { opacity: backdropOpacity }
+              ]} 
+            />
+          </TouchableWithoutFeedback>
+
+          <Animated.View 
+            style={[
+              styles.modalContainer,
+              {
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
                 {/* Client Name */}
                 <Text style={styles.modalClientName}>
@@ -179,6 +313,18 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
                   </TouchableOpacity>
                 </View>
 
+                {/* Last Reminder Section */}
+                {lastReminder && (
+                  <View style={styles.reminderSection}>
+                    <Text style={styles.reminderDateText}>
+                      {formatReminderDate(lastReminder.date)}, {formatReminderTime(lastReminder.date)}
+                    </Text>
+                    <Text style={styles.reminderTimeText}>
+                      {parseReminderComment(lastReminder.comment) || 'No comment'}
+                    </Text>
+                  </View>
+                )}
+
                 {/* Cancel Button */}
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -188,9 +334,9 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+            </TouchableWithoutFeedback>
+          </Animated.View>
+        </View>
       </Modal>
 
       {/* Chat Modal */}
@@ -207,26 +353,32 @@ const ClientActionModal = ({ visible, onClose, clientName, client, authToken, on
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  overlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdropOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalContainer: {
-    width: '85%',
-    maxWidth: 400,
+    backgroundColor: '#F5F5F5',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 40,
+    overflow: 'hidden',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
     padding: 32,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 5,
+    paddingBottom: 40,
   },
   modalClientName: {
     fontSize: 18,
@@ -241,7 +393,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 24,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   actionButton: {
     alignItems: 'center',
@@ -256,9 +408,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  reminderSection: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  reminderDateText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#999999',
+    fontFamily: 'futura',
+    marginBottom: 4,
+  },
+  reminderTimeText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#202020',
+    fontFamily: 'futura',
+  },
   cancelButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
+    alignSelf: 'center',
   },
   cancelButtonText: {
     fontSize: 14,

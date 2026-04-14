@@ -24,6 +24,7 @@ const ClientsScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sections, setSections] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState('Active');
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -77,8 +78,15 @@ const ClientsScreen = () => {
   };
 
   const organizeSections = (clientsList) => {
+    // Filter clients based on selected filter
+    let filteredClients = clientsList;
+    if (selectedFilter === 'Active') {
+      filteredClients = clientsList.filter(client => client.mbActivityStatus !== 'Inactive');
+    }
+    // 'All' shows all clients
+
     // Group clients by first letter
-    const grouped = clientsList.reduce((acc, client) => {
+    const grouped = filteredClients.reduce((acc, client) => {
       const firstLetter = (client.name[0] || '').toUpperCase();
       if (!acc[firstLetter]) {
         acc[firstLetter] = [];
@@ -102,6 +110,13 @@ const ClientsScreen = () => {
 
     setSections(sectionsList);
   };
+
+  // Re-organize sections when filter changes
+  useEffect(() => {
+    if (clients.length > 0) {
+      organizeSections(clients);
+    }
+  }, [selectedFilter]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -195,6 +210,46 @@ const ClientsScreen = () => {
         title="Clients" 
         showBackButton={false}
       />
+      
+      {/* Title and Inline Filter Buttons */}
+      <View style={styles.titleContainer}>
+        <Text style={styles.sectionTitle}>CLIENTS</Text>
+        <View style={styles.inlineFilterButtons}>
+        <TouchableOpacity
+          style={[
+            styles.inlineFilterButton,
+            selectedFilter === 'Active' && styles.inlineFilterButtonActive,
+          ]}
+          onPress={() => setSelectedFilter('Active')}
+        >
+          <Text
+            style={[
+              styles.inlineFilterButtonText,
+              selectedFilter === 'Active' && styles.inlineFilterButtonTextActive,
+            ]}
+          >
+            Active
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.inlineFilterButton,
+            selectedFilter === 'All' && styles.inlineFilterButtonActive,
+          ]}
+          onPress={() => setSelectedFilter('All')}
+        >
+          <Text
+            style={[
+              styles.inlineFilterButtonText,
+              selectedFilter === 'All' && styles.inlineFilterButtonTextActive,
+            ]}
+          >
+            All
+          </Text>
+        </TouchableOpacity>
+      </View>
+      </View>
+
       <SectionList
         sections={sections}
         keyExtractor={(item) => item._id}
@@ -236,6 +291,7 @@ const ClientsScreen = () => {
           fetchClients(); // Refresh to show new reminders
         }}
         client={selectedClient}
+        sourceScreen="MBMain"
       />
     </View>
   );
@@ -245,6 +301,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#F5F5F5',
+  },
+  sectionTitle: {
+    color: "#797979",
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'futura',
+    paddingLeft: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -260,9 +331,9 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   sectionHeaderText: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#666666',
+    color: '#797979',
     fontFamily: 'futura',
     letterSpacing: 0.5,
   },
@@ -294,6 +365,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999999',
     fontFamily: 'futura',
+  },
+  inlineFilterButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inlineFilterButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#377473',
+    backgroundColor: 'transparent',
+    marginRight: 12,
+  },
+  inlineFilterButtonActive: {
+    backgroundColor: '#377473',
+  },
+  inlineFilterButtonText: {
+    fontSize: 10,
+    color: '#377473',
+    fontFamily: 'futura',
+  },
+  inlineFilterButtonTextActive: {
+    color: '#FDFDFD',
   },
 });
 
