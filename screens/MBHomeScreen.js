@@ -134,7 +134,7 @@ const MBHomeScreen = () => {
             generalCallRequestClients.push(client);
           }
           // Application Call Requested (old system) - clients with active call schedule preference
-          else if (client.hasCallRequest) {
+          if (client.hasCallRequest) {
             callRequestClients.push(client);
           }
         });
@@ -202,8 +202,46 @@ const MBHomeScreen = () => {
           new Date(b.requestedAt || b.assignedAt) - new Date(a.requestedAt || a.assignedAt)
         );
         
+        // Application calls - filter by future dates based on callSchedulePreference.preferredDay
+        const applyApplicationFilter = (clients) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          let filtered = clients.filter(c => {
+            if (!c.callSchedulePreference?.preferredDay) return false;
+            const callDate = new Date(c.callSchedulePreference.preferredDay);
+            callDate.setHours(0, 0, 0, 0);
+            return callDate >= today; // Only future or today calls
+          });
+          
+          if (selectedFilter === 'Today') {
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(c => {
+              const callDate = new Date(c.callSchedulePreference.preferredDay);
+              callDate.setHours(0, 0, 0, 0);
+              return callDate.getTime() === today.getTime();
+            });
+          } else if (selectedFilter === 'This week') {
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay());
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            endOfWeek.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(c => {
+              const callDate = new Date(c.callSchedulePreference.preferredDay);
+              callDate.setHours(0, 0, 0, 0);
+              return callDate >= startOfWeek && callDate <= endOfWeek;
+            });
+          }
+          
+          return filtered.sort((a, b) => 
+            new Date(a.callSchedulePreference.preferredDay) - new Date(b.callSchedulePreference.preferredDay)
+          );
+        };
+        
         setGeneralCallRequests(sortedGeneralCallRequests);
-        setCallRequests(applyFilter(callRequestClients));
+        setCallRequests(applyApplicationFilter(callRequestClients));
         setRealtorNewClients(realtorClients);
         setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
