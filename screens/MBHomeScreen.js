@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   callItem: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sectionTitle: {
     color: "#797979",

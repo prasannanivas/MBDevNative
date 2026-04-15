@@ -48,7 +48,6 @@
         },
         "UIUserInterfaceStyle": "Light",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Roost Mortgage Broker needs camera access to allow you to take photos of documents for client verification.",
         "NSPhotoLibraryUsageDescription": "Roost Mortgage Broker needs photo library access to allow you to select and upload documents.",
         "NSContactsUsageDescription": "Roost Mortgage Broker needs contacts access to help you connect with your clients more easily.",
         "NSUserNotificationsUsageDescription": "Roost Mortgage Broker sends notifications to keep you updated on client requests, messages, and appointment reminders.",
@@ -67,7 +66,6 @@
         "backgroundColor": "#CB003F"
       },
       "permissions": [
-        "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "READ_CONTACTS"
