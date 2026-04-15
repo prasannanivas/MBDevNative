@@ -29,6 +29,7 @@ const MBHomeScreen = () => {
   const { broker, authToken } = useAuth();
   const navigation = useNavigation();
   const [callRequests, setCallRequests] = useState([]);
+  const [generalCallRequests, setGeneralCallRequests] = useState([]);
   const [realtorNewClients, setRealtorNewClients] = useState([]);
   const [clientIntros, setClientIntros] = useState([]);
   const [recentDocuments, setRecentDocuments] = useState([]);
@@ -83,11 +84,16 @@ const MBHomeScreen = () => {
             // Log realtor info for debugging
             console.log('Client:', client.name, 'realtorInfo:', client.realtorInfo);
             
-            // Check if client has an active call request
+            // Check if client has an active call request (old system)
             const hasCallRequest = client.callSchedulePreference && 
               client.callSchedulePreference.preferredDay && 
               client.callSchedulePreference.preferredTime && 
               !client.callSchedulePreference.hasCallCompleted;
+            
+            // Check if client has a general call request (new system)
+            const hasGeneralCallRequest = client.generalCallSchedule &&
+              client.generalCallSchedule.isActive &&
+              !client.generalCallSchedule.hasMBReturnedCall;
             
             const mapped = {
               _id: client._id,
@@ -97,10 +103,12 @@ const MBHomeScreen = () => {
               type: client.type || 'client',
               firstName: nameParts[0] || '',
               lastName: nameParts.slice(1).join(' ') || '',
-              requestedAt: client.callSchedulePreference?.scheduledAt || assignment.assignedAt,
+              requestedAt: client.generalCallSchedule?.requestedAt || client.callSchedulePreference?.scheduledAt || assignment.assignedAt,
               priority: client.status,
               callSchedulePreference: client.callSchedulePreference,
+              generalCallSchedule: client.generalCallSchedule,
               hasCallRequest: hasCallRequest,
+              hasGeneralCallRequest: hasGeneralCallRequest,
               realtorInfo: client.realtorInfo || client.assignedRealtor,
               assignedAt: assignment.assignedAt,
               mbActivityStatus: client.mbActivityStatus || 'Active',
@@ -116,12 +124,17 @@ const MBHomeScreen = () => {
         // Categorize clients into different call types (exclude inactive)
         const activeClients = allClients.filter(c => c.mbActivityStatus !== 'Inactive');
         const callRequestClients = [];
+        const generalCallRequestClients = [];
         const realtorClients = activeClients; // Active clients sorted by recent, with realtor info
         const introClients = [];
         
         activeClients.forEach(client => {
-          // Call Requested - clients with active call requests
-          if (client.hasCallRequest) {
+          // General Call Requested (new system) - clients with active general call requests
+          if (client.hasGeneralCallRequest) {
+            generalCallRequestClients.push(client);
+          }
+          // Application Call Requested (old system) - clients with active call schedule preference
+          else if (client.hasCallRequest) {
             callRequestClients.push(client);
           }
         });
@@ -184,12 +197,18 @@ const MBHomeScreen = () => {
           new Date(b.uploadedAt) - new Date(a.uploadedAt)
         ).slice(0, 5);
 
+        // General call requests - show ALL unreturned calls (no filter applied)
+        const sortedGeneralCallRequests = generalCallRequestClients.sort((a, b) => 
+          new Date(b.requestedAt || b.assignedAt) - new Date(a.requestedAt || a.assignedAt)
+        );
+        
+        setGeneralCallRequests(sortedGeneralCallRequests);
         setCallRequests(applyFilter(callRequestClients));
         setRealtorNewClients(realtorClients);
         setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
         
-        console.log(`Categorized clients - Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}, Recent Documents: ${sortedDocuments.length}`);
+        console.log(`Categorized clients - General Call Requests: ${generalCallRequestClients.length}, Application Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}, Recent Documents: ${sortedDocuments.length}`);  
       }
     } catch (error) {
       console.error('Error fetching call requests:', error);
@@ -256,6 +275,25 @@ const MBHomeScreen = () => {
             },
           }
         );
+        
+        // If client has an active general call request, mark it as completed
+        if (client.generalCallSchedule?.isActive && !client.generalCallSchedule?.hasMBReturnedCall) {
+          await fetch(
+            `${API_BASE_URL}/client/${client._id}/mark-call-completed`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            }
+          );
+          console.log('General call request marked as completed for client:', client.name);
+          // Refresh the list to update UI
+          setTimeout(() => {
+            fetchCallRequests();
+          }, 500);
+        }
       } else {
         Alert.alert('Error', 'Unable to make phone call');
       }
@@ -329,7 +367,8 @@ const MBHomeScreen = () => {
   };
 
   // Remaining calls include all but the featured one (if featured)
-  const remainingCalls =  callRequests;
+  const remainingGeneralCalls = generalCallRequests;
+  const remainingApplicationCalls = callRequests;
   
   // Featured calls for other sections
   const displayedRealtorClients = realtorNewClients.slice(0, 5); // Always show top 5 only
@@ -350,6 +389,26 @@ const MBHomeScreen = () => {
 
   // Calculate time left or date to display
   const getCallTimeDisplay = (call) => {
+    // Handle general call schedule (new system) - show when requested
+    if (call?.generalCallSchedule?.requestedAt) {
+      const requestedDate = new Date(call.generalCallSchedule.requestedAt);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      requestedDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = today - requestedDate;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) {
+        return 'Requested today';
+      } else if (diffDays === 1) {
+        return 'Requested yesterday';
+      } else if (diffDays > 1) {
+        return `Requested ${diffDays} days ago`;
+      }
+    }
+    
+    // Handle call schedule preference (old system) - show when scheduled for
     if (!call?.callSchedulePreference?.preferredDay) {
       console.log('No preferredDay found for call:', call?.name);
       return 'Call scheduled';
@@ -402,16 +461,16 @@ const MBHomeScreen = () => {
           />
         }
       >
-        {/* CALL REQUESTED SECTION */}
+        {/* CALL REQUESTED SECTION (General Call Schedule) */}
 
-        {remainingCalls.length > 0 ? (
+        {remainingGeneralCalls.length > 0 ? (
           <>
-            <View style={[styles.titleContainer, { backgroundColor: remainingCalls.length > 0 ? '#F0913A4D' : '#4CAF504D' }]}>
-          <Text style={styles.sectionTitle}>CALL REQUESTED</Text>
+            <View style={[styles.titleContainer, { backgroundColor: remainingGeneralCalls.length > 0 ? '#F0913A4D' : '#4CAF504D' }]}>
+          <Text style={styles.sectionTitleCR}>CALL REQUESTED</Text>
         </View>
           
           <View style={[styles.featuredCallSection, { backgroundColor: '#F0913A4D' }]}>
-            {remainingCalls.map((item) => (
+            {remainingGeneralCalls.map((item) => (
               <View key={item._id} style={styles.callItem}>
                 {renderCallRequestCard({ item })}
               </View>
@@ -447,6 +506,23 @@ const MBHomeScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+
+        
+        {/* APPLICATION SECTION (Old Call Schedule Preference) */}
+        {remainingApplicationCalls.length > 0 && (
+          <>
+            <View style={styles.titleContainer}>
+              <Text style={styles.sectionTitle}>APPLICATION</Text>
+            </View>
+            
+            {remainingApplicationCalls.map((item) => (
+              <View key={item._id} style={styles.callItem}>
+                {renderCallRequestCard({ item })}
+              </View>
+            ))}
+          </>
+        )}
 
         {/* REALTOR - NEW CLIENT SECTION */}
         <View style={styles.titleContainer}>
@@ -659,6 +735,11 @@ const styles = StyleSheet.create({
   },
   bellButton: {
     padding: 8,
+  },
+  sectionTitleCR: {
+    color: "#202020",
+    fontWeight: '700',
+    fontSize: 11, 
   },
   loadingContainer: {
     flex: 1,
