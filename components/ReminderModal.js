@@ -13,6 +13,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 
-const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MBMain' }) => {
+const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MBMain', defaultReminderType = null }) => {
   const { broker, authToken } = useAuth();
   const [step, setStep] = useState(1);
 
@@ -67,7 +68,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
   const [contactMethod, setContactMethod] = useState(sourceScreen === 'Messages' ? 'Message' : 'Call');
-  const [contactTarget, setContactTarget] = useState('Client');
+  const [contactTarget, setContactTarget] = useState('client');
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inactiveComment, setInactiveComment] = useState('');
@@ -89,16 +90,30 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
   
   // Build the selectedType from contactMethod and contactTarget
   const buildSelectedType = () => {
-    return `${contactMethod} ${contactTarget.toLowerCase()}`;
+    return `${contactMethod} ${contactTarget}`;
   };
   
   // Reset defaults based on source screen when modal opens
   useEffect(() => {
     if (visible) {
-      setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
-      setContactTarget('Client');
+      if (defaultReminderType) {
+        // If defaultReminderType is provided, extract target (client or Realtor)
+        console.log('🎯 [ReminderModal] Using default reminder type:', defaultReminderType);
+        
+        // Parse the defaultReminderType to extract target
+        // e.g., "Call client" -> target: "client", "Call Realtor" -> target: "Realtor"
+        const parts = defaultReminderType.split(' ');
+        const target = parts.slice(1).join(' '); // "client" or "Realtor"
+        
+        setContactTarget(target);
+        setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
+      } else {
+        setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
+        setContactTarget('client');
+      }
+      setStep(1); // Start from date selection
     }
-  }, [visible, sourceScreen]);
+  }, [visible, sourceScreen, defaultReminderType]);
   
   // Filter type options based on whether client has a realtor assigned
   const getTypeOptions = () => {
@@ -210,7 +225,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
     setSelectedDate(null);
     setSelectedType(null);
     setContactMethod(sourceScreen === 'Messages' ? 'Message' : 'Call');
-    setContactTarget('Client');
+    setContactTarget('client');
     setComment('');
     setCustomDay('');
     setCustomMonth('');
@@ -326,7 +341,12 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
 
   const renderMainStep = () => {
     return (
-      <View style={styles.modalContent}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.modalContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Set reminder - Date</Text>
 
         {/* Date Display Row */}
@@ -361,35 +381,11 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
           </TouchableOpacity>
         </View>
 
-        {/* Realtor / Client Row (if has realtor) */}
-        {hasRealtor && (
-          <View style={styles.contactMethodRow}>
-            <TouchableOpacity 
-              style={[styles.contactOption, contactTarget === 'Realtor' && styles.contactOptionSelected]} 
-              onPress={() => setContactTarget('Realtor')}
-            >
-              {contactTarget === 'Realtor' && <Text style={styles.checkmark}>✓</Text>}
-              <Text style={[styles.contactOptionText, contactTarget === 'Realtor' && styles.contactOptionTextSelected]}>
-                Realtor
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.contactOption, contactTarget === 'Client' && styles.contactOptionSelected]} 
-              onPress={() => setContactTarget('Client')}
-            >
-              {contactTarget === 'Client' && <Text style={styles.checkmark}>✓</Text>}
-              <Text style={[styles.contactOptionText, contactTarget === 'Client' && styles.contactOptionTextSelected]}>
-                Client
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Comment Input */}
         <TextInput
           style={styles.commentInput}
           placeholder="Add a comment here"
-          placeholderTextColor="#999"
+          placeholderTextColor="#4D4D4D"
           multiline
           numberOfLines={4}
           value={comment}
@@ -413,7 +409,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -511,7 +507,12 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
     const newStatus = isCurrentlyInactive ? 'active' : 'inactive';
     
     return (
-    <View style={styles.modalContent}>
+    <ScrollView 
+      style={styles.scrollView}
+      contentContainerStyle={styles.modalContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.confirmTitle}>Are you sure you want to set</Text>
       <Text style={styles.clientName}>{client?.name || `${client?.firstName} ${client?.lastName}` || 'this client'}</Text>
       <Text style={styles.confirmSubtext}>to {newStatus}?</Text>
@@ -519,7 +520,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
       <TextInput
         style={styles.commentInput}
         placeholder={isCurrentlyInactive ? "Add a comment (optional)" : "Add a comment here"}
-        placeholderTextColor="#999"
+        placeholderTextColor="#4D4D4D"
         multiline
         numberOfLines={4}
         value={inactiveComment}
@@ -542,7 +543,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );};
 
 
@@ -553,34 +554,40 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
       animationType="none"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={handleClose}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={handleClose}>
+            <Animated.View 
+              style={[
+                styles.backdropOverlay, 
+                { opacity: backdropOpacity }
+              ]} 
+            />
+          </TouchableWithoutFeedback>
+
           <Animated.View 
             style={[
-              styles.backdropOverlay, 
-              { opacity: backdropOpacity }
-            ]} 
-          />
-        </TouchableWithoutFeedback>
-
-        <Animated.View 
-          style={[
-            styles.modalContainer,
-            {
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View>
-              {step === 1 && renderDateStep()}
-              {step === 2 && renderMainStep()}
-              {step === 3 && renderCustomDateStep()}
-              {step === 5 && renderInactiveConfirmation()}
-            </View>
-          </TouchableWithoutFeedback>
-        </Animated.View>
-      </View>
+              styles.modalContainer,
+              {
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View>
+                {step === 1 && renderDateStep()}
+                {step === 2 && renderMainStep()}
+                {step === 3 && renderCustomDateStep()}
+                {step === 5 && renderInactiveConfirmation()}
+              </View>
+            </TouchableWithoutFeedback>
+          </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -599,7 +606,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContainer: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FDFDFD',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderBottomLeftRadius: 16,
@@ -609,8 +616,11 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     overflow: 'hidden',
   },
+  scrollView: {
+    maxHeight: '100%',
+  },
   modalContent: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FDFDFD',
     borderRadius: 0,
     padding: 32,
     paddingBottom: 40,
@@ -772,10 +782,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    fontSize: 16,
-    color: '#202020',
-    fontFamily: 'Futura Book',
+    backgroundColor: '#F4F4F4',
+    borderWidth: 1,
+    borderColor: '#D2D2D2',
+    fontSize: 14,
+    color: '#4D4D4D',
+    fontFamily: 'futura',
     minHeight: 100,
     textAlignVertical: 'top',
     marginTop: 4,

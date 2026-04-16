@@ -30,17 +30,97 @@ const MBHomeScreen = () => {
   const navigation = useNavigation();
   const [callRequests, setCallRequests] = useState([]);
   const [generalCallRequests, setGeneralCallRequests] = useState([]);
+  const [followUpReminders, setFollowUpReminders] = useState([]);
   const [realtorNewClients, setRealtorNewClients] = useState([]);
   const [clientIntros, setClientIntros] = useState([]);
   const [recentDocuments, setRecentDocuments] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('Today');
   // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [reminderContext, setReminderContext] = useState('client'); // 'client' or 'realtor'
   const [calledClients, setCalledClients] = useState(new Set());
+
+  // Safe date parsing for iOS compatibility
+  // Helper function to check if a client has any future reminders
+  const hasFutureReminder = (client) => {
+    if (!client.reminders || client.reminders.length === 0) return false;
+    
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    return client.reminders.some(reminder => {
+      if (reminder.isActive === false) return false;
+      
+      const reminderDate = parseDate(reminder.date);
+      if (!reminderDate) return false;
+      
+      reminderDate.setHours(0, 0, 0, 0);
+      return reminderDate >= now; // Reminder is today or in the future
+    });
+  };
+
+  const parseDate = (dateString) => {
+    if (!dateString) return null;
+    
+    // If it's already a Date object, return it
+    if (dateString instanceof Date) return dateString;
+    
+    // Convert string to ensure it's a string
+    const dateStr = String(dateString).trim();
+    
+    // Month name to number mapping
+    const monthMap = {
+      'january': 0, 'jan': 0,
+      'february': 1, 'feb': 1,
+      'march': 2, 'mar': 2,
+      'april': 3, 'apr': 3,
+      'may': 4,
+      'june': 5, 'jun': 5,
+      'july': 6, 'jul': 6,
+      'august': 7, 'aug': 7,
+      'september': 8, 'sep': 8, 'sept': 8,
+      'october': 9, 'oct': 9,
+      'november': 10, 'nov': 10,
+      'december': 11, 'dec': 11
+    };
+    
+    // Try to parse common formats that iOS has trouble with
+    // Format: "March 28, 2026", "Apr 17, 2026", "April17, 2026"
+    const monthDayYearPattern = /^([a-zA-Z]+)\s*(\d{1,2}),?\s*(\d{4})$/;
+    const match = dateStr.match(monthDayYearPattern);
+    
+    if (match) {
+      const monthName = match[1].toLowerCase();
+      const day = parseInt(match[2], 10);
+      const year = parseInt(match[3], 10);
+      
+      if (monthMap.hasOwnProperty(monthName)) {
+        const month = monthMap[monthName];
+        // Create date using UTC to avoid timezone issues
+        const date = new Date(year, month, day, 0, 0, 0, 0);
+        
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+    }
+    
+    // Try standard ISO format or other formats
+    const date = new Date(dateStr);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', dateString);
+      return new Date(); // Return current date as fallback
+    }
+    
+    return date;
+  };
 
   useEffect(() => {
     fetchCallRequests();
@@ -49,6 +129,7 @@ const MBHomeScreen = () => {
 
   const fetchCallRequests = async () => {
     console.log('🔄 [MBHomeScreen] fetchCallRequests called');
+    setIsLoading(true);
     try {
       const response = await fetch(
         `${API_BASE_URL}/admin/broker-clients/${broker._id}?includeNeededDocs=false`,
@@ -62,8 +143,14 @@ const MBHomeScreen = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('fetchCallRequests: raw response data:', data);
-        console.log('fetchCallRequests: assignments count:', (data.assignments || []).length);
+        console.log('=== API RESPONSE DEBUG ===');
+        console.log('Selected filter:', selectedFilter);
+        console.log('Raw response data assignments:', (data.assignments || []).length);
+        console.log('Assignments with generalCallSchedule:', (data.assignments || []).filter(a => a.clientId?.generalCallSchedule).length);
+        console.log('Assignments with active general calls:', (data.assignments || []).filter(a => 
+          a.clientId?.generalCallSchedule?.isActive && !a.clientId?.generalCallSchedule?.hasMBReturnedCall
+        ).length);
+        console.log('==========================');
         
         // Log mbActivityStatus and documents for all clients
         if (data.assignments && data.assignments.length > 0) {
@@ -91,9 +178,14 @@ const MBHomeScreen = () => {
               !client.callSchedulePreference.hasCallCompleted;
             
             // Check if client has a general call request (new system)
+            // Show if active, regardless of whether call was returned
+            // Only hide if there's a future reminder set
             const hasGeneralCallRequest = client.generalCallSchedule &&
-              client.generalCallSchedule.isActive &&
-              !client.generalCallSchedule.hasMBReturnedCall;
+              client.generalCallSchedule.isActive;
+            
+            // Check if call was returned (completed)
+            const hasReturnedCall = client.generalCallSchedule &&
+              client.generalCallSchedule.hasMBReturnedCall;
             
             const mapped = {
               _id: client._id,
@@ -109,6 +201,8 @@ const MBHomeScreen = () => {
               generalCallSchedule: client.generalCallSchedule,
               hasCallRequest: hasCallRequest,
               hasGeneralCallRequest: hasGeneralCallRequest,
+              hasReturnedCall: hasReturnedCall,
+              reminders: client.reminders || [],
               realtorInfo: client.realtorInfo || client.assignedRealtor,
               assignedAt: assignment.assignedAt,
               mbActivityStatus: client.mbActivityStatus || 'Active',
@@ -129,15 +223,26 @@ const MBHomeScreen = () => {
         const introClients = [];
         
         activeClients.forEach(client => {
-          // General Call Requested (new system) - clients with active general call requests
-          if (client.hasGeneralCallRequest) {
+          // General Call Requested (new system) - only show if active AND no future reminder
+          if (client.hasGeneralCallRequest && !hasFutureReminder(client)) {
             generalCallRequestClients.push(client);
           }
-          // Application Call Requested (old system) - clients with active call schedule preference
-          if (client.hasCallRequest) {
+          // Application Call Requested (old system) - show if has call request AND no future reminder
+          if (client.hasCallRequest && !hasFutureReminder(client)) {
             callRequestClients.push(client);
           }
         });
+        
+        console.log('=== CATEGORIZATION DEBUG ===');
+        console.log('Active clients count:', activeClients.length);
+        console.log('General call request clients:', generalCallRequestClients.length);
+        console.log('Application call request clients:', callRequestClients.length);
+        console.log('General call clients:', generalCallRequestClients.map(c => ({ 
+          name: c.firstName + ' ' + c.lastName, 
+          hasGeneral: c.hasGeneralCallRequest,
+          requestedAt: c.requestedAt 
+        })));
+        console.log('===========================');
         
         // Apply filter to all categories
         const now = new Date();
@@ -197,30 +302,121 @@ const MBHomeScreen = () => {
           new Date(b.uploadedAt) - new Date(a.uploadedAt)
         ).slice(0, 5);
 
+        // Extract follow-up reminders (reminders with call actions)
+        const followUpRemindersArray = [];
+        data.assignments?.forEach((assignment) => {
+          const client = assignment.clientId;
+          if (!client || !client.reminders) return;
+          
+          client.reminders.forEach((reminder) => {
+            if (reminder.isActive === false) return;
+            
+            // Parse the comment to extract type
+            const commentParts = (reminder.comment || '').split('|~|');
+            const reminderType = commentParts[0];
+            const reminderNote = commentParts[1] || '';
+            
+            // Only include call reminders
+            if (reminderType === 'Call client' || reminderType === 'Call Realtor') {
+              const nameParts = (client.name || '').split(' ');
+              followUpRemindersArray.push({
+                _id: client._id,  // Use client ID as main ID for navigation
+                reminderId: reminder._id,
+                clientId: client._id,
+                name: client.name,
+                clientName: client.name,
+                email: client.email,
+                phone: client.phone,
+                type: client.type || 'client',
+                firstName: nameParts[0] || '',
+                lastName: nameParts.slice(1).join(' ') || '',
+                callPhone: reminderType === 'Call Realtor' && client.realtorInfo?.phone 
+                  ? client.realtorInfo.phone 
+                  : client.phone,
+                reminderDate: reminder.date,
+                reminderType: reminderType,
+                reminderNote: reminderNote,
+                priority: client.status,
+                assignedAt: assignment.assignedAt,
+                mbActivityStatus: client.mbActivityStatus || 'Active',
+                realtorInfo: client.realtorInfo,
+                documents: client.documents || [],
+                callSchedulePreference: client.callSchedulePreference,
+                generalCallSchedule: client.generalCallSchedule,
+              });
+            }
+          });
+        });
+        
+        // Apply Today/This Week filter to follow-up reminders
+        const applyFollowUpFilter = (reminders) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          let filtered = reminders.filter(r => {
+            const reminderDate = parseDate(r.reminderDate);
+            if (!reminderDate) return false;
+            reminderDate.setHours(0, 0, 0, 0);
+            return reminderDate >= today; // Only future or today reminders
+          });
+          
+          if (selectedFilter === 'Today') {
+            filtered = filtered.filter(r => {
+              const reminderDate = parseDate(r.reminderDate);
+              if (!reminderDate) return false;
+              reminderDate.setHours(0, 0, 0, 0);
+              return reminderDate.getTime() === today.getTime();
+            });
+          } else if (selectedFilter === 'This week') {
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay());
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            endOfWeek.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(r => {
+              const reminderDate = parseDate(r.reminderDate);
+              if (!reminderDate) return false;
+              reminderDate.setHours(0, 0, 0, 0);
+              return reminderDate >= startOfWeek && reminderDate <= endOfWeek;
+            });
+          }
+          
+          return filtered.sort((a, b) => {
+            const dateA = parseDate(a.reminderDate);
+            const dateB = parseDate(b.reminderDate);
+            return dateA - dateB;
+          });
+        };
+
         // General call requests - show ALL unreturned calls (no filter applied)
         const sortedGeneralCallRequests = generalCallRequestClients.sort((a, b) => 
           new Date(b.requestedAt || b.assignedAt) - new Date(a.requestedAt || a.assignedAt)
         );
         
-        // Application calls - filter by future dates based on callSchedulePreference.preferredDay
+        console.log('=== GENERAL CALLS DEBUG ===');
+        console.log('Selected Filter:', selectedFilter);
+        console.log('General call request clients count:', generalCallRequestClients.length);
+        console.log('Sorted general call requests:', sortedGeneralCallRequests);
+        console.log('=========================');
+        
+        // Application calls - show ALL (including overdue) based on filter, sorted by date
         const applyApplicationFilter = (clients) => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           
           let filtered = clients.filter(c => {
             if (!c.callSchedulePreference?.preferredDay) return false;
-            const callDate = new Date(c.callSchedulePreference.preferredDay);
-            callDate.setHours(0, 0, 0, 0);
-            return callDate >= today; // Only future or today calls
+            const callDate = parseDate(c.callSchedulePreference.preferredDay);
+            return callDate !== null; // Include all valid dates (past, present, future)
           });
           
           if (selectedFilter === 'Today') {
-            const endOfDay = new Date();
-            endOfDay.setHours(23, 59, 59, 999);
+            // Show calls scheduled for today OR overdue calls
             filtered = filtered.filter(c => {
-              const callDate = new Date(c.callSchedulePreference.preferredDay);
+              const callDate = parseDate(c.callSchedulePreference.preferredDay);
+              if (!callDate) return false;
               callDate.setHours(0, 0, 0, 0);
-              return callDate.getTime() === today.getTime();
+              return callDate.getTime() <= today.getTime(); // Today or past
             });
           } else if (selectedFilter === 'This week') {
             const startOfWeek = new Date(today);
@@ -229,28 +425,49 @@ const MBHomeScreen = () => {
             endOfWeek.setDate(startOfWeek.getDate() + 6);
             endOfWeek.setHours(23, 59, 59, 999);
             filtered = filtered.filter(c => {
-              const callDate = new Date(c.callSchedulePreference.preferredDay);
+              const callDate = parseDate(c.callSchedulePreference.preferredDay);
+              if (!callDate) return false;
               callDate.setHours(0, 0, 0, 0);
-              return callDate >= startOfWeek && callDate <= endOfWeek;
+              // Include if within this week OR overdue
+              return callDate <= endOfWeek;
             });
           }
           
-          return filtered.sort((a, b) => 
-            new Date(a.callSchedulePreference.preferredDay) - new Date(b.callSchedulePreference.preferredDay)
-          );
+          console.log('=== APPLICATION FILTER DEBUG ===');
+          console.log('Filter:', selectedFilter);
+          console.log('Total application clients before filter:', clients.length);
+          console.log('Filtered application clients:', filtered.length);
+          console.log('Filtered clients:', filtered.map(c => ({
+            name: c.firstName + ' ' + c.lastName,
+            preferredDay: c.callSchedulePreference?.preferredDay
+          })));
+          console.log('================================');
+          
+          return filtered.sort((a, b) => {
+            const dateA = parseDate(a.callSchedulePreference.preferredDay);
+            const dateB = parseDate(b.callSchedulePreference.preferredDay);
+            return dateA - dateB; // Overdue first, then upcoming
+          });
         };
         
         setGeneralCallRequests(sortedGeneralCallRequests);
         setCallRequests(applyApplicationFilter(callRequestClients));
+        setFollowUpReminders(applyFollowUpFilter(followUpRemindersArray));
         setRealtorNewClients(realtorClients);
         setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
+        
+        console.log('=== STATE SET DEBUG ===');
+        console.log('General call requests state count:', sortedGeneralCallRequests.length);
+        console.log('Application call requests count:', applyApplicationFilter(callRequestClients).length);
+        console.log('=======================');
         
         console.log(`Categorized clients - General Call Requests: ${generalCallRequestClients.length}, Application Call Requests: ${callRequestClients.length}, Realtor Clients: ${realtorClients.length}, Client Intros: ${introClients.length}, Recent Documents: ${sortedDocuments.length}`);  
       }
     } catch (error) {
       console.error('Error fetching call requests:', error);
     } finally {
+      setInitialLoading(false);
       setIsLoading(false);
       setRefreshing(false);
     }
@@ -287,6 +504,7 @@ const MBHomeScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
+    setCalledClients(new Set()); // Clear local call tracking on refresh
     fetchCallRequests();
     fetchPendingInvites();
   };
@@ -340,8 +558,9 @@ const MBHomeScreen = () => {
     }
   };
 
-  const handleReminder = (client) => {
+  const handleReminder = (client, context = 'client') => {
     setSelectedClient(client);
+    setReminderContext(context);
     setShowReminderModal(true);
   };
 
@@ -355,6 +574,9 @@ const MBHomeScreen = () => {
     const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
     const status = isPriority ? 'Priority' : 'Active';
     const isInactive = item.mbActivityStatus === 'Inactive';
+    const hasReturnedCall = item.hasReturnedCall || false;
+    // Show inverted button if locally called OR database shows returned call
+    const showInverted = isCalled || hasReturnedCall;
 
     return (
       <ClientCard
@@ -368,7 +590,7 @@ const MBHomeScreen = () => {
       >
         {/* Call Button */}
         <TouchableOpacity onPress={() => handleCall(item)}>
-          <CallButtonIcon bgColor="#F0913A" />
+          <CallButtonIcon bgColor="#F0913A" inverted={showInverted} />
         </TouchableOpacity>
 
         {/* Alert/Reminder Button */}
@@ -385,7 +607,64 @@ const MBHomeScreen = () => {
     </View>
   );
 
-  if (isLoading) {
+  const renderFollowUpCard = ({ item }) => {
+    const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
+    const isInactive = item.mbActivityStatus === 'Inactive';
+    const isRealtorCall = item.reminderType === 'Call Realtor';
+    const isCalled = calledClients.has(item.clientId);
+    
+    // Format display name based on reminder type
+    const displayName = isRealtorCall && item.realtorInfo?.name
+      ? `${item.realtorInfo.name} (${clientName})`
+      : clientName;
+    
+    // Format reminder date display
+    const getReminderTimeDisplay = () => {
+      const reminderDate = parseDate(item.reminderDate);
+      if (!reminderDate) return 'Scheduled';
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      reminderDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = reminderDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) {
+        return 'Today';
+      } else if (diffDays === 1) {
+        return 'Tomorrow';
+      } else if (diffDays > 1) {
+        return `${diffDays} days`;
+      }
+      return 'Scheduled';
+    };
+
+    return (
+      <ClientCard
+        clientName={displayName}
+        status={item.reminderType}
+        showStatus={true}
+        showInitials={true}
+        squareIcon={isRealtorCall}
+        timeRange={getReminderTimeDisplay()}
+        isInactive={isInactive}
+        onPress={() => handleClientPress(item)}
+      >
+        {/* Call Button */}
+        <TouchableOpacity onPress={() => handleCall({ phone: item.callPhone, _id: item.clientId })}>
+          <CallButtonIcon bgColor="#F0913A" inverted={isCalled} />
+        </TouchableOpacity>
+
+        {/* Alert/Reminder Button */}
+        <TouchableOpacity onPress={() => handleReminder(item)}>
+          <AlertButtonIcon />
+        </TouchableOpacity>
+      </ClientCard>
+    );
+  };
+
+  if (initialLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -408,6 +687,12 @@ const MBHomeScreen = () => {
   const remainingGeneralCalls = generalCallRequests;
   const remainingApplicationCalls = callRequests;
   
+  console.log('=== RENDER DEBUG ===');
+  console.log('generalCallRequests state:', generalCallRequests.length);
+  console.log('remainingGeneralCalls:', remainingGeneralCalls.length);
+  console.log('Selected filter at render:', selectedFilter);
+  console.log('===================');
+  
   // Featured calls for other sections
   const displayedRealtorClients = realtorNewClients.slice(0, 5); // Always show top 5 only
   
@@ -427,9 +712,29 @@ const MBHomeScreen = () => {
 
   // Calculate time left or date to display
   const getCallTimeDisplay = (call) => {
+    // Handle completed calls (show when they were called)
+    if (call?.hasReturnedCall && call?.generalCallSchedule?.calledAt) {
+      const calledDate = new Date(call.generalCallSchedule.calledAt);
+      const now = new Date();
+      const diffMs = now - calledDate;
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 0) {
+        return `Called ${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+      } else if (diffHours === 0) {
+        return `Called ${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+      } else {
+        return `Called ${diffHours} hr${diffHours !== 1 ? 's' : ''} ago`;
+      }
+    }
+    
     // Handle general call schedule (new system) - show when requested
     if (call?.generalCallSchedule?.requestedAt) {
-      const requestedDate = new Date(call.generalCallSchedule.requestedAt);
+      const requestedDate = parseDate(call.generalCallSchedule.requestedAt);
+      if (!requestedDate) return 'Requested recently';
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       requestedDate.setHours(0, 0, 0, 0);
@@ -452,7 +757,9 @@ const MBHomeScreen = () => {
       return 'Call scheduled';
     }
     
-    const callDate = new Date(call.callSchedulePreference.preferredDay);
+    const callDate = parseDate(call.callSchedulePreference.preferredDay);
+    if (!callDate) return 'Call scheduled';
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     callDate.setHours(0, 0, 0, 0);
@@ -472,6 +779,10 @@ const MBHomeScreen = () => {
       return '3 days left';
     } else if (diffDays > 0 && diffDays <= 3) {
       return `${diffDays} days left`;
+    } else if (diffDays < 0) {
+      // Overdue
+      const overdueDays = Math.abs(diffDays);
+      return `${overdueDays} day${overdueDays !== 1 ? 's' : ''} overdue`;
     } else {
       // Format as "Mar 10, 2026"
       const options = { month: 'short', day: 'numeric', year: 'numeric' };
@@ -518,7 +829,11 @@ const MBHomeScreen = () => {
         ) : (
           <View style={[styles.emptyFeaturedSection, { backgroundColor: '#CDDCDC' }]}>
             <View style={styles.emptyFeaturedCardInner}>
-              <Text style={styles.emptyFeaturedText}>You have no calls requested</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Text style={styles.emptyFeaturedText}>You have no calls requested</Text>
+              )}
             </View>
           </View>
         )}
@@ -548,19 +863,66 @@ const MBHomeScreen = () => {
 
         
         {/* APPLICATION SECTION (Old Call Schedule Preference) */}
-        {remainingApplicationCalls.length > 0 && (
-          <>
-            <View style={styles.titleContainer}>
-              <Text style={styles.sectionTitle}>APPLICATION</Text>
-            </View>
-            
-            {remainingApplicationCalls.map((item) => (
-              <View key={item._id} style={styles.callItem}>
-                {renderCallRequestCard({ item })}
+        <>
+          <View style={styles.titleContainer}>
+            <Text style={styles.sectionTitle}>APPLICATION</Text>
+          </View>
+          
+          {remainingApplicationCalls.length > 0 ? (
+            <>
+              {remainingApplicationCalls.map((item) => (
+                <View key={item._id} style={styles.callItem}>
+                  {renderCallRequestCard({ item })}
+                </View>
+              ))}
+            </>
+          ) : (
+            <View style={styles.emptyApplicationSection}>
+              <View style={styles.emptyApplicationCard}>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <Text style={styles.emptyApplicationText}>
+                    {selectedFilter === 'Today' 
+                      ? 'You have no Application calls today'
+                      : 'You have no Application calls this week'}
+                  </Text>
+                )}
               </View>
-            ))}
-          </>
-        )}
+            </View>
+          )}
+        </>
+
+        {/* FOLLOW UP SECTION (Call Reminders) */}
+        <>
+          <View style={styles.titleContainer}>
+            <Text style={styles.sectionTitle}>FOLLOW UP</Text>
+          </View>
+          
+          {followUpReminders.length > 0 ? (
+            <>
+              {followUpReminders.map((item) => (
+                <View key={item.reminderId} style={styles.callItem}>
+                  {renderFollowUpCard({ item })}
+                </View>
+              ))}
+            </>
+          ) : (
+            <View style={styles.emptyApplicationSection}>
+              <View style={styles.emptyApplicationCard}>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <Text style={styles.emptyApplicationText}>
+                    {selectedFilter === 'Today' 
+                      ? 'You have no follow-up calls today'
+                      : 'You have no follow-up calls this week'}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+        </>
 
         {/* REALTOR - NEW CLIENT SECTION */}
         <View style={styles.titleContainer}>
@@ -594,9 +956,9 @@ const MBHomeScreen = () => {
                       handleCall(item);
                     }
                   }}>
-                    <CallButtonIcon />
+                    <CallButtonIcon inverted={calledClients.has(item.realtorInfo?._id || item._id)} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleReminder(item)}>
+                  <TouchableOpacity onPress={() => handleReminder(item, item.realtorInfo?.name ? 'realtor' : 'client')}>
                     <AlertButtonIcon />
                   </TouchableOpacity>
                 </ClientCard>
@@ -610,58 +972,6 @@ const MBHomeScreen = () => {
           </View>
         )}
 
-        {/* CLIENT INTRO SECTION */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.sectionTitle}>CLIENT INTRO</Text>
-        </View>
-        
-        {upcomingIntroCall ? (
-          <View style={styles.featuredCallSection}>
-            <ClientCard
-              clientName={`${upcomingIntroCall.firstName || ''} ${upcomingIntroCall.lastName || ''}`.trim()}
-              status="New Client"
-              showStatus={false}
-              showInitials={true}
-              timeRange={getCallTimeDisplay(upcomingIntroCall)}
-              isInactive={upcomingIntroCall.mbActivityStatus === 'Inactive'}
-              onPress={() => handleClientPress(upcomingIntroCall)}
-            >
-              <TouchableOpacity onPress={() => handleCall(upcomingIntroCall)}>
-                <CallButtonIcon bgColor={"#2271B1"} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleReminder(upcomingIntroCall)}>
-                <AlertButtonIcon />
-              </TouchableOpacity>
-            </ClientCard>
-          </View>
-        ) : null}
-
-        {remainingIntroCalls.length > 0 ? (
-          remainingIntroCalls.map((item) => (
-            <View key={item._id} style={styles.callItem}>
-              <ClientCard
-                clientName={`${item.firstName || ''} ${item.lastName || ''}`.trim()}
-                status="New Client"
-                showStatus={false}
-                showInitials={true}
-                timeRange={getCallTimeDisplay(item)}
-                isInactive={item.mbActivityStatus === 'Inactive'}
-                onPress={() => handleClientPress(item)}
-              >
-                <TouchableOpacity onPress={() => handleCall(item)}>
-                  <CallButtonIcon />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleReminder(item)}>
-                  <AlertButtonIcon />
-                </TouchableOpacity>
-              </ClientCard>
-            </View>
-          ))
-        ) : !upcomingIntroCall ? (
-          <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>You have no client intro calls scheduled for {selectedFilter === 'Today' ? 'today' : selectedFilter.toLowerCase()}</Text>
-          </View>
-        ) : null}
 
         {/* NEW DOCUMENTS SECTION */}
         <View style={styles.titleContainer}>
@@ -694,7 +1004,7 @@ const MBHomeScreen = () => {
 
         {/* PENDING INVITES SECTION */}
         <View style={styles.titleContainer}>
-          <Text style={styles.sectionTitle}>PENDING INVITES</Text>
+          <Text style={styles.sectionTitle}>New Clients</Text>
         </View>
 
         {pendingInvites.length > 0 ? (
@@ -752,9 +1062,11 @@ const MBHomeScreen = () => {
           onClose={() => {
             setShowReminderModal(false);
             setSelectedClient(null);
+            setReminderContext('client');
           }}
           client={selectedClient}
           sourceScreen="MBMain"
+          defaultReminderType={reminderContext === 'realtor' ? 'Call Realtor' : 'Call client'}
           onSuccess={() => {
             console.log('🔄 [MBHomeScreen] onSuccess called - refreshing client list');
             // Refresh the client list after setting reminder or inactive status
@@ -1008,6 +1320,21 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   emptyFeaturedText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    fontFamily: 'futura',
+  },
+  emptyApplicationSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+  },
+  emptyApplicationCard: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  emptyApplicationText: {
     fontSize: 16,
     color: '#999',
     textAlign: 'center',
