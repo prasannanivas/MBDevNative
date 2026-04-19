@@ -30,7 +30,7 @@ const MessagesScreen = () => {
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedFilter, setSelectedFilter] = useState('Unread');
   // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
@@ -208,19 +208,19 @@ const MessagesScreen = () => {
               <Text style={styles.sectionTitle}>MESSAGES</Text>
               <View style={styles.inlineFilterButtons}>
                 <TouchableOpacity
-                  style={[styles.inlineFilterButton, selectedFilter === 'All' && styles.inlineFilterButtonActive]}
-                  onPress={() => setSelectedFilter('All')}
-                >
-                  <Text style={[styles.inlineFilterButtonText, selectedFilter === 'All' && styles.inlineFilterButtonTextActive]}>
-                    All
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={[styles.inlineFilterButton, selectedFilter === 'Unread' && styles.inlineFilterButtonActive]}
                   onPress={() => setSelectedFilter('Unread')}
                 >
                   <Text style={[styles.inlineFilterButtonText, selectedFilter === 'Unread' && styles.inlineFilterButtonTextActive]}>
                     Unread
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inlineFilterButton, selectedFilter === 'All' && styles.inlineFilterButtonActive]}
+                  onPress={() => setSelectedFilter('All')}
+                >
+                  <Text style={[styles.inlineFilterButtonText, selectedFilter === 'All' && styles.inlineFilterButtonTextActive]}>
+                    All
                   </Text>
                 </TouchableOpacity>
               </View>

@@ -27,7 +27,7 @@ const RemindersScreen = () => {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('Upcoming'); // 'Upcoming' or 'Past'
+  const [selectedFilter, setSelectedFilter] = useState('Past'); // 'Upcoming' or 'Past'
   const [sections, setSections] = useState([]);
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -482,22 +482,22 @@ const RemindersScreen = () => {
         <Text style={styles.sectionTitle}>HISTORY</Text>
         <View style={styles.filterContainer}>
         <TouchableOpacity
-          style={[styles.filterButton, selectedFilter === 'Upcoming' && styles.filterButtonActive]}
-          onPress={() => setSelectedFilter('Upcoming')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.filterButtonText, selectedFilter === 'Upcoming' && styles.filterButtonTextActive]}>
-            Upcoming
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
           style={[styles.filterButton, selectedFilter === 'Past' && styles.filterButtonActive]}
           onPress={() => setSelectedFilter('Past')}
           activeOpacity={0.7}
         >
           <Text style={[styles.filterButtonText, selectedFilter === 'Past' && styles.filterButtonTextActive]}>
             Past
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.filterButton, selectedFilter === 'Upcoming' && styles.filterButtonActive]}
+          onPress={() => setSelectedFilter('Upcoming')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, selectedFilter === 'Upcoming' && styles.filterButtonTextActive]}>
+            Upcoming
           </Text>
         </TouchableOpacity>
       </View>
