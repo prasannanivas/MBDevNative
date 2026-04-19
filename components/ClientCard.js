@@ -4,6 +4,7 @@ import COLORS from '../utils/colors';
 
 const ClientCard = ({ 
   clientName, 
+  realtorName,
   status = 'Active', 
   showStatus = true,
   showInitials = true,
@@ -43,6 +44,13 @@ const ClientCard = ({
 
           {/* Right Section */}
           <View style={[styles.rightSection, !showInitials && styles.rightSectionFullWidth]}>
+            {/* Realtor Name - Show if provided */}
+            {realtorName && (
+              <Text style={styles.realtorName} numberOfLines={1}>
+                {realtorName}
+              </Text>
+            )}
+            
             {/* Name */}
             <Text style={[styles.name, isUnread && styles.nameUnread, isInactive && styles.nameInactive]} numberOfLines={1}>
               {clientName || 'Client Name'}
@@ -147,6 +155,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 8,
+  },
+  realtorName: {
+    fontFamily: 'futura',
+    fontWeight: '600',
+    fontSize: 13,
+    color: '#5f6368',
+    lineHeight: 16,
   },
   rightSectionFullWidth: {
     marginLeft: 0, // Remove margin when no profile icon

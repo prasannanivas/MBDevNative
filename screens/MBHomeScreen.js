@@ -35,6 +35,7 @@ const MBHomeScreen = () => {
   const [clientIntros, setClientIntros] = useState([]);
   const [recentDocuments, setRecentDocuments] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]);
+  const [recentlyAcceptedClients, setRecentlyAcceptedClients] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -227,7 +228,7 @@ const MBHomeScreen = () => {
           if (client.hasGeneralCallRequest && !hasFutureReminder(client)) {
             generalCallRequestClients.push(client);
           }
-          // Application Call Requested (old system) - show if has call request AND no future reminder
+          // Application Call Requested (old system) - show ALL calls BUT exclude those with future reminders
           if (client.hasCallRequest && !hasFutureReminder(client)) {
             callRequestClients.push(client);
           }
@@ -450,12 +451,35 @@ const MBHomeScreen = () => {
           });
         };
         
+        // Filter for recently accepted clients (within last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 300);
+        
+        const recentAccepted = allClients
+          .filter(client => {
+            const assignedDate = new Date(client.assignedAt);
+            return assignedDate >= thirtyDaysAgo;
+          })
+          .map(client => ({
+            _id: client._id,
+            clientName: client.name,
+            clientEmail: client.email,
+            clientPhone: client.phone,
+            realtorName: client.realtorInfo?.name || 'Unknown Realtor',
+            assignedAt: client.assignedAt,
+            type: 'accepted'
+          }))
+          .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt));
+        
+        console.log('🟢 [ACCEPTED CLIENTS] Recent accepted:', recentAccepted.length);
+        
         setGeneralCallRequests(sortedGeneralCallRequests);
         setCallRequests(applyApplicationFilter(callRequestClients));
         setFollowUpReminders(applyFollowUpFilter(followUpRemindersArray));
         setRealtorNewClients(realtorClients);
         setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
+        setRecentlyAcceptedClients(recentAccepted);
         
         console.log('=== STATE SET DEBUG ===');
         console.log('General call requests state count:', sortedGeneralCallRequests.length);
@@ -796,6 +820,28 @@ const MBHomeScreen = () => {
     return getRelativeTime(assignedAt);
   };
 
+  const getSignedUpTimeDisplay = (timestamp, type) => {
+    // For pending invites
+    if (type === 'pending') return 'Not yet Signed up';
+    
+    // For accepted clients
+    if (!timestamp) return 'Recently signed up';
+    const signedUpDate = new Date(timestamp);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    signedUpDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = today - signedUpDate;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Signed Up Today';
+    if (diffDays === 1) return 'Signed Up yesterday';
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const date = new Date(timestamp);
+    return `Signed Up on ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  };
+
   return (
     <View style={styles.container}>
       <Header />
@@ -973,6 +1019,91 @@ const MBHomeScreen = () => {
         )}
 
 
+        {/* NEW CLIENTS SECTION (Pending Invites + Recently Accepted) */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.sectionTitle}>NEW CLIENTS</Text>
+        </View>
+
+        {(() => {
+          // Combine pending invites and recently accepted clients
+          const allNewClients = [
+            ...pendingInvites.map(invite => ({
+              ...invite,
+              type: 'pending',
+              timestamp: invite.createdAt
+            })),
+            ...recentlyAcceptedClients.map(client => ({
+              ...client,
+              type: 'accepted',
+              timestamp: client.assignedAt
+            }))
+          ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+          // Apply priority logic: exclude clients that are in Follow-up or Application
+          const filteredNewClients = allNewClients.filter(item => {
+            // Pending invites always show (no full client data available)
+            if (item.type === 'pending') return true;
+            
+            // For accepted clients, check priorities
+            // Find the full client data from the API response
+            // Since we don't have direct access to all clients data here, 
+            // we'll need to check against the current state arrays
+            
+            // Priority 1: Exclude if in Follow-up (has future reminder)
+            const isInFollowUp = followUpReminders.some(reminder => reminder.clientId === item._id);
+            if (isInFollowUp) return false;
+            
+            // Priority 2: Exclude if in Application
+            const isInApplication = callRequests.some(call => call._id === item._id);
+            if (isInApplication) return false;
+            
+            // Priority 3: Show in New Clients
+            return true;
+          });
+
+          return filteredNewClients.length > 0 ? (
+            filteredNewClients.map((item) => (
+              <ClientCard
+                key={item._id}
+                clientName={item.clientName}
+                realtorName={item.realtorName}
+                timeRange={getSignedUpTimeDisplay(item.timestamp, item.type)}
+                showStatus={false}
+              >
+                {/* For accepted clients only: show Call + Set Reminder buttons */}
+                {item.type === 'accepted' && (
+                  <View style={styles.newClientActions}>
+                    <TouchableOpacity
+                      onPress={() => handleCall({
+                        _id: item._id,
+                        name: item.clientName,
+                        phone: item.clientPhone
+                      })}
+                    >
+                      <CallButtonIcon bgColor="#F0913A" />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      onPress={() => handleReminder({
+                        _id: item._id,
+                        name: item.clientName,
+                        phone: item.clientPhone,
+                        email: item.clientEmail
+                      })}
+                    >
+                      <AlertButtonIcon />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </ClientCard>
+            ))
+          ) : (
+            <View style={styles.emptyFeaturedCard}>
+              <Text style={styles.emptyFeaturedText}>No new clients</Text>
+            </View>
+          );
+        })()}
+
         {/* NEW DOCUMENTS SECTION */}
         <View style={styles.titleContainer}>
           <Text style={styles.sectionTitle}>NEW DOCUMENTS</Text>
@@ -999,46 +1130,6 @@ const MBHomeScreen = () => {
         ) : (
           <View style={styles.emptyFeaturedCard}>
             <Text style={styles.emptyFeaturedText}>No new documents pending review</Text>
-          </View>
-        )}
-
-        {/* PENDING INVITES SECTION */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.sectionTitle}>New Clients</Text>
-        </View>
-
-        {pendingInvites.length > 0 ? (
-          pendingInvites.map((invite) => (
-            <View key={invite._id} style={styles.inviteItem}>
-              <View style={styles.inviteContent}>
-                <View style={styles.inviteHeader}>
-                  <Text style={styles.inviteRealtorName}>{invite.realtorName}</Text>
-                  <View style={styles.inviteStatusBadge}>
-                    <Text style={styles.inviteStatusBadgeText}>PENDING</Text>
-                  </View>
-                </View>
-                <Text style={styles.inviteClientName}>→ {invite.clientName}</Text>
-                {invite.clientEmail && (
-                  <Text style={styles.inviteDetail}>{invite.clientEmail}</Text>
-                )}
-                {invite.clientPhone && (
-                  <Text style={styles.inviteDetail}>{invite.clientPhone}</Text>
-                )}
-              </View>
-              <Text style={styles.inviteTime}>
-                {new Date(invite.createdAt).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </Text>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyFeaturedCard}>
-            <Text style={styles.emptyFeaturedText}>No pending invites</Text>
           </View>
         )}
       </ScrollView>
@@ -1493,6 +1584,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray,
     fontFamily: 'futura',
+  },
+  // New Clients badge styles
+  newClientBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newClientActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  callRealtorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#377473',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  callRealtorButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: 'futura',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgePending: {
+    backgroundColor: '#FFF3E0',
+  },
+  statusBadgeAccepted: {
+    backgroundColor: '#E8F5E9',
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: 'futura',
+    letterSpacing: 0.5,
+  },
+  statusBadgeTextPending: {
+    color: '#F57C00',
+  },
+  statusBadgeTextAccepted: {
+    color: '#2E7D32',
   },
 });
 
