@@ -43,6 +43,8 @@ const MBHomeScreen = () => {
   // const [showFilterModal, setShowFilterModal] = useState(false); // Using inline filters now
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedInviteId, setSelectedInviteId] = useState(null);
+  const [isPendingInvite, setIsPendingInvite] = useState(false);
   const [reminderContext, setReminderContext] = useState('client'); // 'client' or 'realtor'
   const [calledClients, setCalledClients] = useState(new Set());
 
@@ -305,6 +307,8 @@ const MBHomeScreen = () => {
 
         // Extract follow-up reminders (reminders with call actions)
         const followUpRemindersArray = [];
+        
+        // Add reminders from accepted clients
         data.assignments?.forEach((assignment) => {
           const client = assignment.clientId;
           if (!client || !client.reminders) return;
@@ -344,10 +348,84 @@ const MBHomeScreen = () => {
                 documents: client.documents || [],
                 callSchedulePreference: client.callSchedulePreference,
                 generalCallSchedule: client.generalCallSchedule,
+                isPendingInvite: false,
               });
             }
           });
         });
+        
+        // Fetch pending invites and add their reminders
+        try {
+          const invitesResponse = await fetch(
+            `${API_BASE_URL}/admin/invites/pending/${broker._id}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+            }
+          );
+          
+          if (invitesResponse.ok) {
+            const invitesData = await invitesResponse.json();
+            const invites = invitesData.invites || [];
+            
+            console.log('🟡 [FOLLOW UP] Processing pending invites:', invites.length);
+            
+            // Add reminders from pending invites
+            invites.forEach((invite) => {
+              if (!invite.reminders || invite.reminders.length === 0) return;
+              
+              invite.reminders.forEach((reminder) => {
+                if (reminder.isActive === false) return;
+                
+                // Parse the comment to extract type
+                const commentParts = (reminder.comment || '').split('|~|');
+                const reminderType = commentParts[0];
+                const reminderNote = commentParts[1] || '';
+                
+                // Only include call reminders
+                if (reminderType === 'Call client' || reminderType === 'Call Realtor') {
+                  const nameParts = (invite.clientName || '').split(' ');
+                  followUpRemindersArray.push({
+                    _id: invite._id,  // Use invite ID
+                    reminderId: reminder._id,
+                    clientId: invite._id,
+                    name: invite.clientName,
+                    clientName: invite.clientName,
+                    email: invite.clientEmail,
+                    phone: invite.clientPhone,
+                    type: 'pending',
+                    firstName: nameParts[0] || '',
+                    lastName: nameParts.slice(1).join(' ') || '',
+                    callPhone: reminderType === 'Call Realtor' && invite.realtorPhone 
+                      ? invite.realtorPhone 
+                      : invite.clientPhone,
+                    reminderDate: reminder.date,
+                    reminderType: reminderType,
+                    reminderNote: reminderNote,
+                    priority: 'New',
+                    assignedAt: invite.createdAt,
+                    mbActivityStatus: 'Pending',
+                    realtorInfo: { name: invite.realtorName, phone: invite.realtorPhone },
+                    documents: [],
+                    isPendingInvite: true,
+                  });
+                  
+                  console.log('✅ [FOLLOW UP] Added pending invite reminder:', invite.clientName, 'Date:', reminder.date);
+                }
+              });
+            });
+            
+            // Also update pending invites state for NEW CLIENTS section
+            const sortedInvites = invites
+              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+              .slice(0, 5);
+            setPendingInvites(sortedInvites);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching pending invites for follow-up:', error);
+        }
         
         // Apply Today/This Week filter to follow-up reminders
         const applyFollowUpFilter = (reminders) => {
@@ -467,6 +545,9 @@ const MBHomeScreen = () => {
             clientPhone: client.phone,
             realtorName: client.realtorInfo?.name || 'Unknown Realtor',
             assignedAt: client.assignedAt,
+            reminders: client.reminders || [],
+            callSchedulePreference: client.callSchedulePreference,
+            hasCallRequest: client.hasCallRequest,
             type: 'accepted'
           }))
           .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt));
@@ -588,6 +669,21 @@ const MBHomeScreen = () => {
     setShowReminderModal(true);
   };
 
+  const handleReminderForItem = (item) => {
+    // Handle both pending invites and accepted clients
+    setSelectedClient({
+      _id: item._id,
+      name: item.clientName,
+      phone: item.clientPhone,
+      email: item.clientEmail,
+      reminders: item.reminders || []
+    });
+    setSelectedInviteId(item.type === 'pending' ? item._id : null);
+    setIsPendingInvite(item.type === 'pending');
+    setReminderContext('client');
+    setShowReminderModal(true);
+  };
+
   const handleClientPress = (client) => {
     navigation.navigate('ClientDetails', { client });
   };
@@ -634,6 +730,7 @@ const MBHomeScreen = () => {
   const renderFollowUpCard = ({ item }) => {
     const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
     const isInactive = item.mbActivityStatus === 'Inactive';
+    const isPendingInvite = item.isPendingInvite || false;
     const isRealtorCall = item.reminderType === 'Call Realtor';
     const isCalled = calledClients.has(item.clientId);
     
@@ -667,7 +764,7 @@ const MBHomeScreen = () => {
     return (
       <ClientCard
         clientName={displayName}
-        status={item.reminderType}
+        status={isPendingInvite ? 'Not yet Signed up' : item.reminderType}
         showStatus={true}
         showInitials={true}
         squareIcon={isRealtorCall}
@@ -676,12 +773,18 @@ const MBHomeScreen = () => {
         onPress={() => handleClientPress(item)}
       >
         {/* Call Button */}
-        <TouchableOpacity onPress={() => handleCall({ phone: item.callPhone, _id: item.clientId })}>
+        <TouchableOpacity onPress={() => handleCall({ phone: item.callPhone || item.phone, _id: item.clientId || item._id })}>
           <CallButtonIcon bgColor="#F0913A" inverted={isCalled} />
         </TouchableOpacity>
 
         {/* Alert/Reminder Button */}
-        <TouchableOpacity onPress={() => handleReminder(item)}>
+        <TouchableOpacity onPress={() => {
+          if (isPendingInvite) {
+            handleReminderForItem({ ...item, type: 'pending', clientName: item.name });
+          } else {
+            handleReminder(item);
+          }
+        }}>
           <AlertButtonIcon />
         </TouchableOpacity>
       </ClientCard>
@@ -1041,21 +1144,27 @@ const MBHomeScreen = () => {
 
           // Apply priority logic: exclude clients that are in Follow-up or Application
           const filteredNewClients = allNewClients.filter(item => {
-            // Pending invites always show (no full client data available)
-            if (item.type === 'pending') return true;
+            // For pending invites, check if they have future reminders
+            if (item.type === 'pending') {
+              if (hasFutureReminder(item)) {
+                console.log('📌 [New Clients] Excluding pending invite with future reminder:', item.clientName);
+                return false;
+              }
+              return true;
+            }
             
-            // For accepted clients, check priorities
-            // Find the full client data from the API response
-            // Since we don't have direct access to all clients data here, 
-            // we'll need to check against the current state arrays
+            // For accepted clients, check priorities using the full client data
+            // Priority 1: Exclude if has future reminder (should be in Follow-up)
+            if (hasFutureReminder(item)) {
+              console.log('📌 [New Clients] Excluding client with future reminder:', item.clientName);
+              return false;
+            }
             
-            // Priority 1: Exclude if in Follow-up (has future reminder)
-            const isInFollowUp = followUpReminders.some(reminder => reminder.clientId === item._id);
-            if (isInFollowUp) return false;
-            
-            // Priority 2: Exclude if in Application
-            const isInApplication = callRequests.some(call => call._id === item._id);
-            if (isInApplication) return false;
+            // Priority 2: Exclude if in Application (has callSchedulePreference)
+            if (item.hasCallRequest || item.callSchedulePreference?.preferredDay) {
+              console.log('📌 [New Clients] Excluding client in Application:', item.clientName);
+              return false;
+            }
             
             // Priority 3: Show in New Clients
             return true;
@@ -1070,9 +1179,10 @@ const MBHomeScreen = () => {
                 timeRange={getSignedUpTimeDisplay(item.timestamp, item.type)}
                 showStatus={false}
               >
-                {/* For accepted clients only: show Call + Set Reminder buttons */}
-                {item.type === 'accepted' && (
-                  <View style={styles.newClientActions}>
+                {/* Show Call + Set Reminder buttons for both pending invites and accepted clients */}
+                <View style={styles.newClientActions}>
+                  {/* Call button - grey out if no phone */}
+                  {item.clientPhone ? (
                     <TouchableOpacity
                       onPress={() => handleCall({
                         _id: item._id,
@@ -1082,19 +1192,19 @@ const MBHomeScreen = () => {
                     >
                       <CallButtonIcon bgColor="#F0913A" />
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      onPress={() => handleReminder({
-                        _id: item._id,
-                        name: item.clientName,
-                        phone: item.clientPhone,
-                        email: item.clientEmail
-                      })}
-                    >
-                      <AlertButtonIcon />
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  ) : (
+                    <View style={{ opacity: 0.3 }}>
+                      <CallButtonIcon bgColor="#CCCCCC" />
+                    </View>
+                  )}
+                  
+                  {/* Set Reminder button */}
+                  <TouchableOpacity
+                    onPress={() => handleReminderForItem(item)}
+                  >
+                    <AlertButtonIcon />
+                  </TouchableOpacity>
+                </View>
               </ClientCard>
             ))
           ) : (
@@ -1153,11 +1263,15 @@ const MBHomeScreen = () => {
           onClose={() => {
             setShowReminderModal(false);
             setSelectedClient(null);
+            setSelectedInviteId(null);
+            setIsPendingInvite(false);
             setReminderContext('client');
           }}
           client={selectedClient}
           sourceScreen="MBMain"
           defaultReminderType={reminderContext === 'realtor' ? 'Call Realtor' : 'Call client'}
+          inviteId={selectedInviteId}
+          isPendingInvite={isPendingInvite}
           onSuccess={() => {
             console.log('🔄 [MBHomeScreen] onSuccess called - refreshing client list');
             // Refresh the client list after setting reminder or inactive status

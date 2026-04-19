@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import API_BASE_URL from '../config/api';
 import COLORS from '../utils/colors';
 
-const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MBMain', defaultReminderType = null }) => {
+const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MBMain', defaultReminderType = null, inviteId = null, isPendingInvite = false }) => {
   const { broker, authToken } = useAuth();
   const [step, setStep] = useState(1);
 
@@ -175,7 +175,12 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
   const handleSave = async () => {
     Keyboard.dismiss();
     const selectedType = buildSelectedType();
-    if (!selectedDate || !selectedType || !client?._id || !authToken) {
+    
+    // Determine which ID to use
+    const entityId = isPendingInvite ? inviteId : client?._id;
+    const entityType = isPendingInvite ? 'invite' : 'client';
+    
+    if (!selectedDate || !selectedType || !entityId || !authToken) {
       Alert.alert('Error', 'Please complete all fields');
       return;
     }
@@ -185,9 +190,9 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
       // Encode type in comment field using unique separator |~|
       const encodedComment = `${selectedType}|~|${comment || ''}`;
       
-      // Save to server (single source of truth)
+      // Save to server - use appropriate endpoint based on entity type
       const response = await fetch(
-        `${API_BASE_URL}/admin/client/${client._id}/reminders`,
+        `${API_BASE_URL}/admin/${entityType}/${entityId}/reminders`,
         {
           method: 'POST',
           headers: {
@@ -202,7 +207,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
       );
 
       if (response.ok) {
-        console.log('✅ Reminder saved to server');
+        console.log(`✅ Reminder saved to server for ${entityType}`);
         Alert.alert('Success', 'Reminder set successfully');
         if (onSuccess) onSuccess(); // Trigger refresh
         handleClose();
