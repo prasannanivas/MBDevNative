@@ -349,6 +349,7 @@ const MBHomeScreen = () => {
                 callSchedulePreference: client.callSchedulePreference,
                 generalCallSchedule: client.generalCallSchedule,
                 isPendingInvite: false,
+                actions_taken: reminder.actions_taken || [],
               });
             }
           });
@@ -410,6 +411,7 @@ const MBHomeScreen = () => {
                     realtorInfo: { name: invite.realtorName, phone: invite.realtorPhone },
                     documents: [],
                     isPendingInvite: true,
+                    actions_taken: reminder.actions_taken || [],
                   });
                   
                   console.log('✅ [FOLLOW UP] Added pending invite reminder:', invite.clientName, 'Date:', reminder.date);
@@ -663,6 +665,55 @@ const MBHomeScreen = () => {
     }
   };
 
+  const handleFollowUpCall = async (item) => {
+    const phoneNumber = item.callPhone || item.phone;
+    const url = `tel:${phoneNumber}`;
+    const clientId = item.clientId || item._id;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        // Mark as called in local state
+        setCalledClients(prev => new Set([...prev, clientId]));
+        
+        // Add CALLED to actions_taken array and sync
+        if (item.reminderId) {
+          const entityType = item.isPendingInvite ? 'invite' : 'client';
+          const entityId = item.isPendingInvite ? item._id : clientId;
+          
+          // Initialize actions_taken if not exists, then add CALLED
+          const currentActions = item.actions_taken || [];
+          if (!currentActions.includes('CALLED')) {
+            currentActions.push('CALLED');
+          }
+          
+          await fetch(
+            `${API_BASE_URL}/admin/${entityType}/${entityId}/reminders/${item.reminderId}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+              },
+              body: JSON.stringify({ actions_taken: currentActions }),
+            }
+          );
+          console.log(`✅ Reminder marked as CALLED for ${entityType} ${entityId}`);
+          
+          // Refresh to update UI
+          setTimeout(() => {
+            fetchCallRequests();
+          }, 500);
+        }
+      } else {
+        Alert.alert('Error', 'Unable to make phone call');
+      }
+    } catch (error) {
+      console.error('Error making follow-up call:', error);
+    }
+  };
+
   const handleReminder = (client, context = 'client') => {
     setSelectedClient(client);
     setReminderContext(context);
@@ -773,7 +824,7 @@ const MBHomeScreen = () => {
         onPress={() => handleClientPress(item)}
       >
         {/* Call Button */}
-        <TouchableOpacity onPress={() => handleCall({ phone: item.callPhone || item.phone, _id: item.clientId || item._id })}>
+        <TouchableOpacity onPress={() => handleFollowUpCall(item)}>
           <CallButtonIcon bgColor="#F0913A" inverted={isCalled} />
         </TouchableOpacity>
 
