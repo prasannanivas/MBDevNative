@@ -1156,7 +1156,7 @@ const MBHomeScreen = () => {
                       handleCall(item);
                     }
                   }}>
-                    <CallButtonIcon inverted={calledClients.has(item.realtorInfo?._id || item._id)} />
+                    <CallButtonIcon bgColor="#F0913A" inverted={calledClients.has(item.realtorInfo?._id || item._id)} />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleReminder(item, item.realtorInfo?.name ? 'realtor' : 'client')}>
                     <AlertButtonIcon />
@@ -1241,7 +1241,7 @@ const MBHomeScreen = () => {
                         phone: item.clientPhone
                       })}
                     >
-                      <CallButtonIcon bgColor="#F0913A" />
+                      <CallButtonIcon bgColor="#F0913A" inverted={calledClients.has(item._id)} />
                     </TouchableOpacity>
                   ) : (
                     <View style={{ opacity: 0.3 }}>
