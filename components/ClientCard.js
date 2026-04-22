@@ -13,6 +13,7 @@ const ClientCard = ({
   isUnread = false,
   isInactive = false,
   squareIcon = false,
+  hourglassIcon = false,
   onPress, 
   children 
 }) => {
@@ -33,9 +34,9 @@ const ClientCard = ({
         <View style={styles.container}>
           {/* Conditional Profile Icon */}
           {showInitials && (
-            <View style={[styles.profileIcon, isInactive && styles.profileIconInactive, squareIcon && styles.profileIconSquare]}>
-              <View style={styles.profileIconFrame}>
-                <Text style={styles.initials}>
+            <View style={[styles.profileIcon, isInactive && styles.profileIconInactive, squareIcon && styles.profileIconSquare, hourglassIcon && styles.profileIconHourglass]}>
+              <View style={[styles.profileIconFrame, hourglassIcon && styles.profileIconFrameHourglass]}>
+                <Text style={[styles.initials, hourglassIcon && styles.initialsHourglass]}>
                   {getInitials(clientName)}
                 </Text>
               </View>
@@ -136,11 +137,20 @@ const styles = StyleSheet.create({
   profileIconSquare: {
     borderRadius: 4,
   },
+  profileIconHourglass: {
+    width: 38,
+    height: 38,
+    borderRadius: 6,
+    transform: [{ rotate: '45deg' }, { scaleY: 0.65 }],
+  },
   profileIconFrame: {
     width: 49,
     height: 49,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileIconFrameHourglass: {
+    transform: [{ rotate: '-45deg' }],
   },
   initials: {
     fontFamily: 'futura',
@@ -149,6 +159,9 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     color: '#FDFDFD',
     textAlign: 'center',
+  },
+  initialsHourglass: {
+    transform: [{ rotate: '0deg' }],
   },
   rightSection: {
     flex: 1,

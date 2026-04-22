@@ -191,6 +191,11 @@ const ChatModal = ({ visible, onClose, conversation }) => {
     );
   };
 
+  // Early return if no conversation
+  if (!conversation) {
+    return null;
+  }
+
   const participant = conversation.participant || {};
 
   return (

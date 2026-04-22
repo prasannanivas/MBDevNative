@@ -19,15 +19,19 @@ import COLORS from '../utils/colors';
 import { formatPhoneNumber } from '../utils/phoneFormatUtils';
 import { getRelativeTime } from '../utils/dateUtils';
 import ReminderModal from '../components/ReminderModal';
+import ChatModal from '../components/ChatModal';
 // import FilterModal from '../components/FilterModal'; // Using inline filters now
 import Header from '../components/Header';
 import ClientCard from '../components/ClientCard';
 import CallButtonIcon from '../components/icons/CallButtonIcon';
 import AlertButtonIcon from '../components/icons/AlertButtonIcon';
+import ChatIcon from '../components/icons/ChatIcon';
 
 const MBHomeScreen = () => {
   // FEATURE FLAG: Hide users of deleted realtors
   const HIDE_DELETED_REALTOR_CLIENTS = true;
+  // FEATURE FLAG: Show invite follow-ups with hourglass/diamond shape
+  const SHOW_INVITE_HOURGLASS = false;
   
   const { broker, authToken } = useAuth();
   const navigation = useNavigation();
@@ -50,6 +54,9 @@ const MBHomeScreen = () => {
   const [isPendingInvite, setIsPendingInvite] = useState(false);
   const [reminderContext, setReminderContext] = useState('client'); // 'client' or 'realtor'
   const [calledClients, setCalledClients] = useState(new Set());
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
 
   // Safe date parsing for iOS compatibility
   // Helper function to check if a client has any future reminders
@@ -324,8 +331,17 @@ const MBHomeScreen = () => {
             const reminderType = commentParts[0];
             const reminderNote = commentParts[1] || '';
             
-            // Only include call reminders
-            if (reminderType === 'Call client' || reminderType === 'Call Realtor') {
+            console.log(`🔍 [Follow Up] Processing reminder for ${client.name}:`, {
+              reminderType,
+              isActive: reminder.isActive,
+              date: reminder.date,
+            });
+            
+            // Include call and message reminders (case-insensitive)
+            const reminderTypeLower = reminderType.toLowerCase();
+            if (reminderTypeLower === 'call client' || reminderTypeLower === 'call realtor' || 
+                reminderTypeLower === 'message client' || reminderTypeLower === 'message realtor') {
+              console.log(`✅ [Follow Up] Adding ${reminderType} reminder for ${client.name}`);
               const nameParts = (client.name || '').split(' ');
               followUpRemindersArray.push({
                 _id: client._id,  // Use client ID as main ID for navigation
@@ -338,7 +354,7 @@ const MBHomeScreen = () => {
                 type: client.type || 'client',
                 firstName: nameParts[0] || '',
                 lastName: nameParts.slice(1).join(' ') || '',
-                callPhone: reminderType === 'Call Realtor' && client.realtorInfo?.phone 
+                callPhone: reminderTypeLower === 'call realtor' && client.realtorInfo?.phone 
                   ? client.realtorInfo.phone 
                   : client.phone,
                 reminderDate: reminder.date,
@@ -351,6 +367,7 @@ const MBHomeScreen = () => {
                 documents: client.documents || [],
                 callSchedulePreference: client.callSchedulePreference,
                 generalCallSchedule: client.generalCallSchedule,
+                reminders: client.reminders || [], // Include all reminders for marking old ones
                 isPendingInvite: false,
                 actions_taken: reminder.actions_taken || [],
               });
@@ -388,8 +405,17 @@ const MBHomeScreen = () => {
                 const reminderType = commentParts[0];
                 const reminderNote = commentParts[1] || '';
                 
-                // Only include call reminders
-                if (reminderType === 'Call client' || reminderType === 'Call Realtor') {
+                console.log(`🔍 [Follow Up - Invite] Processing reminder for ${invite.clientName}:`, {
+                  reminderType,
+                  isActive: reminder.isActive,
+                  date: reminder.date,
+                });
+                
+                // Include call and message reminders (case-insensitive)
+                const reminderTypeLower = reminderType.toLowerCase();
+                if (reminderTypeLower === 'call client' || reminderTypeLower === 'call realtor' || 
+                    reminderTypeLower === 'message client' || reminderTypeLower === 'message realtor') {
+                  console.log(`✅ [Follow Up - Invite] Adding ${reminderType} reminder for ${invite.clientName}`);
                   const nameParts = (invite.clientName || '').split(' ');
                   followUpRemindersArray.push({
                     _id: invite._id,  // Use invite ID
@@ -402,7 +428,7 @@ const MBHomeScreen = () => {
                     type: 'pending',
                     firstName: nameParts[0] || '',
                     lastName: nameParts.slice(1).join(' ') || '',
-                    callPhone: reminderType === 'Call Realtor' && invite.realtorPhone 
+                    callPhone: reminderTypeLower === 'call realtor' && invite.realtorPhone 
                       ? invite.realtorPhone 
                       : invite.clientPhone,
                     reminderDate: reminder.date,
@@ -413,11 +439,10 @@ const MBHomeScreen = () => {
                     mbActivityStatus: 'Pending',
                     realtorInfo: { name: invite.realtorName, phone: invite.realtorPhone },
                     documents: [],
+                    reminders: invite.reminders || [], // Include all reminders from invite
                     isPendingInvite: true,
                     actions_taken: reminder.actions_taken || [],
                   });
-                  
-                  console.log('✅ [FOLLOW UP] Added pending invite reminder:', invite.clientName, 'Date:', reminder.date);
                 }
               });
             });
@@ -559,9 +584,13 @@ const MBHomeScreen = () => {
         
         console.log('🟢 [ACCEPTED CLIENTS] Recent accepted:', recentAccepted.length);
         
+        console.log(`📊 [Follow Up] Total reminders before filter: ${followUpRemindersArray.length}`);
+        const filteredFollowUpReminders = applyFollowUpFilter(followUpRemindersArray);
+        console.log(`📊 [Follow Up] Total reminders after filter (${selectedFilter}): ${filteredFollowUpReminders.length}`);
+        
         setGeneralCallRequests(sortedGeneralCallRequests);
         setCallRequests(applyApplicationFilter(callRequestClients));
-        setFollowUpReminders(applyFollowUpFilter(followUpRemindersArray));
+        setFollowUpReminders(filteredFollowUpReminders);
         setRealtorNewClients(realtorClients);
         setClientIntros(introClients);
         setRecentDocuments(sortedDocuments);
@@ -742,6 +771,100 @@ const MBHomeScreen = () => {
     navigation.navigate('ClientDetails', { client });
   };
 
+  const handleOpenChat = async (client) => {
+    const clientId = client?._id || client?.clientId;
+    
+    // Check if this is a pending invite
+    if (client.isPendingInvite) {
+      console.log('⚠️ Cannot open chat for pending invite');
+      Alert.alert('Not Available', 'This client has not signed up yet. Chat will be available once they accept the invite.');
+      return;
+    }
+    
+    if (!clientId) {
+      console.log('❌ No client ID available. Client object:', client);
+      Alert.alert('Error', 'Unable to open chat for this client.');
+      return;
+    }
+
+    if (!authToken) {
+      console.log('❌ No auth token available');
+      Alert.alert('Error', 'Authentication required. Please try again.');
+      return;
+    }
+
+    console.log('🟢 Opening chat for client ID:', clientId);
+    console.log('🟢 Client name:', client.name || client.clientName);
+    setIsLoadingChat(true);
+    
+    try {
+      // Fetch all chats (same way as MessagesScreen)
+      const response = await fetch(
+        `${API_BASE_URL}/mortgage-broker/chats`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+        }
+      );
+
+      console.log('🟢 Chats response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🟢 Chats data received, count:', data.chats?.length);
+        
+        // Find chat with this client
+        const clientChat = (data.chats || []).find(chat => {
+          const chatClientId = chat.participants?.client?._id;
+          return chatClientId === clientId || chatClientId === client._id || chatClientId === client.clientId;
+        });
+        
+        if (clientChat) {
+          console.log('🟢 Found existing chat:', clientChat._id);
+          
+          // Structure conversation object exactly like MessagesScreen
+          const clientData = clientChat.participants.client;
+          const nameParts = (clientData.name || '').split(' ');
+          
+          const conversationData = {
+            _id: clientChat._id,
+            participant: {
+              _id: clientData._id,
+              name: clientData.name,
+              email: clientData.email,
+              phone: clientData.phone,
+              type: clientData.type || 'client',
+              firstName: nameParts[0] || '',
+              lastName: nameParts.slice(1).join(' ') || '',
+            },
+            lastMessage: clientChat.lastMessage?.content || '',
+            lastMessageAt: clientChat.lastMessage?.timestamp || clientChat.updatedAt,
+            unreadCount: clientChat.unreadCount?.mortgageBroker || 0,
+          };
+          
+          console.log('🟢 Setting conversation and opening modal...');
+          setSelectedConversation(conversationData);
+          setShowChatModal(true);
+          console.log('🟢 showChatModal set to true, selectedConversation:', conversationData._id);
+        } else {
+          console.log('❌ No existing chat found for client ID:', clientId);
+          Alert.alert('No Conversation', 'No existing conversation found with this client. Navigate to Messages to start a new conversation.');
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Chats response error:', response.status, errorText);
+        Alert.alert('Error', 'Unable to load chats. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error opening chat:', error);
+      Alert.alert('Error', 'Unable to open chat. Please try again.');
+    } finally {
+      setIsLoadingChat(false);
+    }
+  };
+
   const renderCallRequestCard = ({ item }) => {
     const isPriority = item.priority === 'high';
     const isCalled = calledClients.has(item._id);
@@ -785,11 +908,15 @@ const MBHomeScreen = () => {
     const clientName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
     const isInactive = item.mbActivityStatus === 'Inactive';
     const isPendingInvite = item.isPendingInvite || false;
-    const isRealtorCall = item.reminderType === 'Call Realtor';
+    const reminderTypeLower = (item.reminderType || '').toLowerCase();
+    const isRealtorCall = reminderTypeLower === 'call realtor';
+    const isRealtorMessage = reminderTypeLower === 'message realtor';
+    const isClientMessage = reminderTypeLower === 'message client';
+    const isMessageReminder = isRealtorMessage || isClientMessage;
     const isCalled = calledClients.has(item.clientId);
     
     // Format display name based on reminder type
-    const displayName = isRealtorCall && item.realtorInfo?.name
+    const displayName = (isRealtorCall || isRealtorMessage) && item.realtorInfo?.name
       ? `${item.realtorInfo.name} (${clientName})`
       : clientName;
     
@@ -804,6 +931,13 @@ const MBHomeScreen = () => {
       
       const diffTime = reminderDate - today;
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      console.log(`📅 [Follow Up] ${clientName}:`, {
+        reminderDateRaw: item.reminderDate,
+        reminderDateParsed: reminderDate.toLocaleDateString(),
+        today: today.toLocaleDateString(),
+        diffDays,
+      });
       
       if (diffDays === 0) {
         return 'Today';
@@ -821,15 +955,31 @@ const MBHomeScreen = () => {
         status={isPendingInvite ? 'Not yet Signed up' : item.reminderType}
         showStatus={true}
         showInitials={true}
-        squareIcon={isRealtorCall}
+        squareIcon={isRealtorCall || isRealtorMessage}
+        hourglassIcon={SHOW_INVITE_HOURGLASS && isPendingInvite}
         timeRange={getReminderTimeDisplay()}
         isInactive={isInactive}
         onPress={() => handleClientPress(item)}
       >
-        {/* Call Button */}
-        <TouchableOpacity onPress={() => handleFollowUpCall(item)}>
-          <CallButtonIcon bgColor="#F0913A" inverted={isCalled} />
-        </TouchableOpacity>
+        {/* Call or Message Button */}
+        {isMessageReminder ? (
+          <TouchableOpacity onPress={() => {
+            console.log('🔵 Message button clicked for:', item.clientName || item.name);
+            handleOpenChat(item);
+          }}>
+            {isLoadingChat ? (
+              <View style={styles.messageLoadingCircle}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              </View>
+            ) : (
+              <ChatIcon width={43} height={43} greyed={isPendingInvite} />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => handleFollowUpCall(item)}>
+            <CallButtonIcon bgColor="#F0913A" inverted={isCalled} />
+          </TouchableOpacity>
+        )}
 
         {/* Alert/Reminder Button */}
         <TouchableOpacity onPress={() => {
@@ -1313,6 +1463,19 @@ const MBHomeScreen = () => {
         }}
       />
       */}
+
+      {/* Chat Modal */}
+      {selectedConversation && (
+        <ChatModal
+          visible={showChatModal}
+          onClose={() => {
+            console.log('🔴 ChatModal onClose called');
+            setShowChatModal(false);
+            setSelectedConversation(null);
+          }}
+          conversation={selectedConversation}
+        />
+      )}
 
       {/* Reminder Modal */}
       {selectedClient && (
@@ -1805,6 +1968,29 @@ const styles = StyleSheet.create({
   },
   statusBadgeTextAccepted: {
     color: '#2E7D32',
+  },
+  messageButtonCircle: {
+    width: 43,
+    height: 43,
+    borderRadius: 21.5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#F0913A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  messageLoadingCircle: {
+    width: 43,
+    height: 43,
+    borderRadius: 21.5,
+    backgroundColor: '#F0913A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

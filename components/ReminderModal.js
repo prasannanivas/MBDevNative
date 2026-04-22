@@ -144,24 +144,35 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
       return;
     }
     
+    // Get current date at start of day to avoid timezone issues
     let date = new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    
     switch(option) {
       case 'Today':
+        // Today at current hour + 1
+        date = new Date();
         date.setHours(date.getHours() + 1, 0, 0, 0);
         break;
       case 'Tomorrow':
-        date.setDate(date.getDate() + 1);
-        date.setHours(9, 0, 0, 0);
+        // Tomorrow at 9 AM local time
+        date = new Date(year, month, day + 1, 9, 0, 0, 0);
         break;
       case 'Next week':
-        date.setDate(date.getDate() + 7);
-        date.setHours(9, 0, 0, 0);
+        // Same day next week at 9 AM
+        date = new Date(year, month, day + 7, 9, 0, 0, 0);
         break;
       case 'Next month':
-        date.setMonth(date.getMonth() + 1);
-        date.setHours(9, 0, 0, 0);
+        // Same day next month at 9 AM
+        date = new Date(year, month + 1, day, 9, 0, 0, 0);
         break;
     }
+    
+    console.log(`📅 [ReminderModal] Selected ${option}:`, date.toLocaleString());
+    console.log(`📅 [ReminderModal] ISO String:`, date.toISOString());
+    
     setSelectedDate(date);
     setStep(2);
   };
@@ -187,8 +198,60 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
 
     setIsSubmitting(true);
     try {
+      // Use reminders already available in the client object (no need to fetch)
+      const activeReminders = (client?.reminders || []).filter(r => r.isActive !== false);
+      
+      console.log('🔄 [ReminderModal] Found active reminders:', activeReminders.length);
+      console.log('🔄 [ReminderModal] Entity type:', entityType, 'Entity ID:', entityId);
+      
+      // Mark all active reminders with action_taken
+      for (const reminder of activeReminders) {
+        const currentActions = reminder.actions_taken || [];
+        
+        // Check if reminder date is in the past
+        const reminderDate = new Date(reminder.date);
+        const now = new Date();
+        reminderDate.setHours(0, 0, 0, 0);
+        now.setHours(0, 0, 0, 0);
+        
+        const actionLabel = reminderDate < now ? 'EXPIRED_FOLLOWUP' : 'NEW_FOLLOWUP';
+        
+        if (!currentActions.includes(actionLabel)) {
+          currentActions.push(actionLabel);
+        }
+        
+        console.log(`🔄 [ReminderModal] Marking reminder ${reminder._id} with action: ${actionLabel}`);
+        
+        await fetch(
+          `${API_BASE_URL}/admin/${entityType}/${entityId}/reminders/${reminder._id}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ 
+              actions_taken: currentActions,
+              isActive: false // Mark as inactive
+            }),
+          }
+        );
+      }
+      
+      console.log('✅ [ReminderModal] All active reminders marked');
+      
       // Encode type in comment field using unique separator |~|
       const encodedComment = `${selectedType}|~|${comment || ''}`;
+      
+      const reminderData = {
+        date: selectedDate.toISOString(),
+        comment: encodedComment,
+      };
+      
+      console.log(`📤 [ReminderModal] Sending reminder to ${entityType} ${entityId}:`);
+      console.log(`   Date (local): ${selectedDate.toLocaleString()}`);
+      console.log(`   Date (ISO): ${reminderData.date}`);
+      console.log(`   Type: ${selectedType}`);
       
       // Save to server - use appropriate endpoint based on entity type
       const response = await fetch(
@@ -199,10 +262,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`,
           },
-          body: JSON.stringify({
-            date: selectedDate.toISOString(),
-            comment: encodedComment,
-          }),
+          body: JSON.stringify(reminderData),
         }
       );
 
