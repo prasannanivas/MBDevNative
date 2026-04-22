@@ -26,6 +26,9 @@ import CallButtonIcon from '../components/icons/CallButtonIcon';
 import AlertButtonIcon from '../components/icons/AlertButtonIcon';
 
 const MBHomeScreen = () => {
+  // FEATURE FLAG: Hide users of deleted realtors
+  const HIDE_DELETED_REALTOR_CLIENTS = true;
+  
   const { broker, authToken } = useAuth();
   const navigation = useNavigation();
   const [callRequests, setCallRequests] = useState([]);
@@ -872,7 +875,11 @@ const MBHomeScreen = () => {
   console.log('===================');
   
   // Featured calls for other sections
-  const displayedRealtorClients = realtorNewClients.slice(0, 5); // Always show top 5 only
+  // Filter out clients with no realtor if feature flag is enabled
+  const filteredRealtorClients = HIDE_DELETED_REALTOR_CLIENTS 
+    ? realtorNewClients.filter(client => client.realtorInfo && client.realtorInfo.name)
+    : realtorNewClients;
+  const displayedRealtorClients = filteredRealtorClients.slice(0, 5); // Always show top 5 only
   
   const upcomingIntroCall = clientIntros.length > 0 ? clientIntros[0] : null;
   const remainingIntroCalls = upcomingIntroCall ? clientIntros.slice(1) : clientIntros;
@@ -1140,7 +1147,7 @@ const MBHomeScreen = () => {
                 <ClientCard
                   clientName={item.realtorInfo?.name 
                     ? `${item.realtorInfo.name} (${item.firstName || ''} ${item.lastName || ''})`.trim()
-                    : `${item.firstName || ''} ${item.lastName || ''} (No realtor)`.trim()}
+                    : `No Realtor (${item.firstName || ''} ${item.lastName || ''})`.trim()}
                   status={''}
                   showStatus={false}
                   showInitials={true}
