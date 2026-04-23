@@ -11,6 +11,7 @@ import COLORS from '../utils/colors';
 import { useChat } from '../context/ChatContext';
 import CallIcon from '../components/icons/CallIcon';
 import ChatIcon from '../components/icons/ChatIcon';
+import ChatIconBottomTab from '../components/icons/ChatIconBottomTab';
 import BellIcon from '../components/icons/BellIcon';
 import ClientsIcon from '../components/icons/ClientsIcon';
 
@@ -59,7 +60,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
           if (route.name === 'Home') {
             IconComponent = CallIcon;
           } else if (route.name === 'Messages') {
-            IconComponent = ChatIcon;
+            IconComponent = ChatIconBottomTab;
           } else if (route.name === 'Clients') {
             IconComponent = ClientsIcon;
           } else if (route.name === 'Reminders') {
