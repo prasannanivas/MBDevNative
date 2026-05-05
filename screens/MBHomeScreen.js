@@ -986,7 +986,7 @@ const MBHomeScreen = () => {
           if (isPendingInvite) {
             handleReminderForItem({ ...item, type: 'pending', clientName: item.name });
           } else {
-            handleReminder(item);
+            handleReminder(item, (isRealtorCall || isRealtorMessage) ? 'realtor' : 'client');
           }
         }}>
           <AlertButtonIcon />

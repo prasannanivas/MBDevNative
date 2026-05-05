@@ -61,7 +61,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
             IconComponent = CallIcon;
           } else if (route.name === 'Messages') {
             IconComponent = ChatIconBottomTab;
-          } else if (route.name === 'Clients') {
+          } else if (route.name === 'Contacts') {
             IconComponent = ClientsIcon;
           } else if (route.name === 'Reminders') {
             IconComponent = BellIcon;
@@ -111,7 +111,7 @@ const MainTabs = () => {
         component={MessagesScreen}
       />
       <Tab.Screen 
-        name="Clients" 
+        name="Contacts" 
         component={ClientsScreen}
       />
       <Tab.Screen 

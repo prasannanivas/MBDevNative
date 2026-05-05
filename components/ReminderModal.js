@@ -310,6 +310,49 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
     setStep(5);
   };
 
+  const handleDismiss = async () => {
+    console.log('🟠 [ReminderModal] Dismiss clicked for realtor reminder');
+    Keyboard.dismiss();
+    if (!client?._id || !authToken) {
+      Alert.alert('Error', 'Client information not available');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const activeReminders = (client?.reminders || []).filter(r => r.isActive !== false);
+      const pastDate = new Date(Date.now() - 1000); // 1 second before now
+      for (const reminder of activeReminders) {
+        const currentActions = reminder.actions_taken || [];
+        if (!currentActions.includes('DISMISSED')) {
+          currentActions.push('DISMISSED');
+        }
+        await fetch(
+          `${API_BASE_URL}/admin/client/${client._id}/reminders/${reminder._id}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({
+              date: pastDate.toISOString(),
+              actions_taken: currentActions,
+              isActive: false,
+            }),
+          }
+        );
+      }
+      console.log('✅ [ReminderModal] Reminder dismissed (past-dated)');
+      if (onSuccess) onSuccess();
+      handleClose();
+    } catch (error) {
+      console.error('❌ Error dismissing reminder:', error);
+      Alert.alert('Error', 'Failed to dismiss reminder');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleToggleInactive = async () => {
     console.log('🔴 [ReminderModal] handleToggleInactive called');
     console.log('🔴 [ReminderModal] Client ID:', client?._id);
@@ -368,6 +411,7 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
 
   const renderDateStep = () => {
     const isInactive = client?.mbActivityStatus === 'Inactive';
+    const isRealtorContext = defaultReminderType?.toLowerCase().includes('realtor');
     
     return (
     <View style={styles.modalContent}>
@@ -389,11 +433,15 @@ const ReminderModal = ({ visible, onClose, client, onSuccess, sourceScreen = 'MB
 
       <TouchableOpacity 
         style={[styles.inactiveButton, isInactive && styles.activeButton]} 
-        onPress={handleInactiveClick}
+        onPress={isRealtorContext ? handleDismiss : handleInactiveClick}
       >
-        <Text style={styles.inactiveButtonText}>
-          {isInactive ? 'Make Active' : 'Set as Inactive'}
-        </Text>
+        {isSubmitting && isRealtorContext ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.inactiveButtonText}>
+            {isInactive ? 'Make Active' : (isRealtorContext ? 'Dismiss' : 'Set as Inactive')}
+          </Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.bottomButtons}>

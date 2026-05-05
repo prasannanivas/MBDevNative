@@ -25,6 +25,7 @@ const ClientsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [sections, setSections] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('Active');
+  const [contactType, setContactType] = useState('Clients'); // 'Clients' or 'Realtors'
   const [showActionModal, setShowActionModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -61,6 +62,7 @@ const ClientsScreen = () => {
               phone: client.phone,
               type: client.type || 'client',
               mbActivityStatus: client.mbActivityStatus || 'Active',
+              realtorInfo: client.realtorInfo || client.assignedRealtor || null,
             };
           });
 
@@ -78,24 +80,35 @@ const ClientsScreen = () => {
   };
 
   const organizeSections = (clientsList) => {
-    // Filter clients based on selected filter
-    let filteredClients = clientsList;
-    if (selectedFilter === 'Active') {
-      filteredClients = clientsList.filter(client => client.mbActivityStatus !== 'Inactive');
-    }
-    // 'All' shows all clients
+    let items = [];
 
-    // Group clients by first letter
-    const grouped = filteredClients.reduce((acc, client) => {
-      const firstLetter = (client.name[0] || '').toUpperCase();
-      if (!acc[firstLetter]) {
-        acc[firstLetter] = [];
-      }
-      acc[firstLetter].push(client);
+    if (contactType === 'Realtors') {
+      // Extract unique realtors from clients' realtorInfo
+      const realtorMap = {};
+      clientsList.forEach(client => {
+        const r = client.realtorInfo;
+        if (r && r._id && r.name) {
+          if (!realtorMap[r._id]) {
+            realtorMap[r._id] = { _id: r._id, name: r.name, phone: r.phone || null, email: r.email || null };
+          }
+        }
+      });
+      items = Object.values(realtorMap);
+    } else {
+      // Filter clients based on selected filter
+      items = selectedFilter === 'Active'
+        ? clientsList.filter(client => client.mbActivityStatus !== 'Inactive')
+        : clientsList;
+    }
+
+    // Group by first letter
+    const grouped = items.reduce((acc, item) => {
+      const firstLetter = (item.name[0] || '').toUpperCase();
+      if (!acc[firstLetter]) acc[firstLetter] = [];
+      acc[firstLetter].push(item);
       return acc;
     }, {});
 
-    // Sort clients within each group
     Object.keys(grouped).forEach(letter => {
       grouped[letter].sort((a, b) => a.name.localeCompare(b.name));
     });
@@ -111,12 +124,12 @@ const ClientsScreen = () => {
     setSections(sectionsList);
   };
 
-  // Re-organize sections when filter changes
+  // Re-organize sections when filter or contactType changes
   useEffect(() => {
     if (clients.length > 0) {
       organizeSections(clients);
     }
-  }, [selectedFilter]);
+  }, [selectedFilter, contactType]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -194,7 +207,7 @@ const ClientsScreen = () => {
     return (
       <View style={styles.container}>
         <Header 
-          title="Clients" 
+          title="Contacts" 
           showBackButton={false}
         />
         <View style={styles.loadingContainer}>
@@ -207,47 +220,58 @@ const ClientsScreen = () => {
   return (
     <View style={styles.container}>
       <Header 
-        title="Clients" 
+        title="Contacts" 
         showBackButton={false}
       />
       
-      {/* Title and Inline Filter Buttons */}
+      {/* Title */}
       <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>CLIENTS</Text>
-        <View style={styles.inlineFilterButtons}>
-        <TouchableOpacity
-          style={[
-            styles.inlineFilterButton,
-            selectedFilter === 'Active' && styles.inlineFilterButtonActive,
-          ]}
-          onPress={() => setSelectedFilter('Active')}
-        >
-          <Text
-            style={[
-              styles.inlineFilterButtonText,
-              selectedFilter === 'Active' && styles.inlineFilterButtonTextActive,
-            ]}
-          >
-            Active
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.inlineFilterButton,
-            selectedFilter === 'All' && styles.inlineFilterButtonActive,
-          ]}
-          onPress={() => setSelectedFilter('All')}
-        >
-          <Text
-            style={[
-              styles.inlineFilterButtonText,
-              selectedFilter === 'All' && styles.inlineFilterButtonTextActive,
-            ]}
-          >
-            All
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>{contactType.toUpperCase()}</Text>
       </View>
+
+      {/* Filter Buttons Row */}
+      <View style={styles.filterRow}>
+        {/* Left: Clients / Realtors toggle */}
+        <View style={styles.filterLeft}>
+          <TouchableOpacity
+            style={[styles.inlineFilterButton, contactType === 'Clients' && styles.inlineFilterButtonActive]}
+            onPress={() => setContactType('Clients')}
+          >
+            <Text style={[styles.inlineFilterButtonText, contactType === 'Clients' && styles.inlineFilterButtonTextActive]}>
+              Clients
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.inlineFilterButton, contactType === 'Realtors' && styles.inlineFilterButtonActive]}
+            onPress={() => setContactType('Realtors')}
+          >
+            <Text style={[styles.inlineFilterButtonText, contactType === 'Realtors' && styles.inlineFilterButtonTextActive]}>
+              Realtors
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Right: Active / All — only for Clients */}
+        {contactType === 'Clients' && (
+          <View style={styles.filterRight}>
+            <TouchableOpacity
+              style={[styles.inlineFilterButton, selectedFilter === 'Active' && styles.inlineFilterButtonActive]}
+              onPress={() => setSelectedFilter('Active')}
+            >
+              <Text style={[styles.inlineFilterButtonText, selectedFilter === 'Active' && styles.inlineFilterButtonTextActive]}>
+                Active
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.inlineFilterButton, selectedFilter === 'All' && styles.inlineFilterButtonActive]}
+              onPress={() => setSelectedFilter('All')}
+            >
+              <Text style={[styles.inlineFilterButtonText, selectedFilter === 'All' && styles.inlineFilterButtonTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <SectionList
@@ -266,7 +290,9 @@ const ClientsScreen = () => {
         stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No clients found</Text>
+            <Text style={styles.emptyText}>
+              {contactType === 'Realtors' ? 'No realtors found' : 'No clients found'}
+            </Text>
           </View>
         }
       />
@@ -303,12 +329,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   titleContainer: {
+    paddingHorizontal: 28,
+    paddingTop: 20,
+    paddingBottom: 8,
+    backgroundColor: '#F5F5F5',
+  },
+  filterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#F5F5F5',
+    paddingBottom: 8,
+  },
+  filterLeft: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  filterRight: {
+    flexDirection: 'row',
+    gap: 10,
   },
   sectionTitle: {
     color: "#797979",
@@ -366,18 +405,13 @@ const styles = StyleSheet.create({
     color: '#999999',
     fontFamily: 'futura',
   },
-  inlineFilterButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   inlineFilterButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#377473',
     backgroundColor: 'transparent',
-    marginRight: 12,
   },
   inlineFilterButtonActive: {
     backgroundColor: '#377473',
