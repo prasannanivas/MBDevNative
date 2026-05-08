@@ -485,14 +485,12 @@ const RemindersScreen = () => {
   const renderReminderItem = ({ item }) => {
     const display = formatReminderDisplay(item);
     const isInactive = item.clientData?.mbActivityStatus === 'Inactive';
-    const isSuperseded = item.isActive === false;
     
     return (
       <TouchableOpacity
         style={[
           styles.reminderItem,
           isInactive && styles.reminderItemInactive,
-          isSuperseded && { opacity: 0.4 },
         ]}
         onPress={() => handleClientPress(item)}
         activeOpacity={0.7}
