@@ -47,16 +47,15 @@ const RemindersScreen = () => {
     try {
       console.log('📋 Fetching reminders from server for broker:', broker._id);
       
-      // Fetch from server (single source of truth)
-      const response = await fetch(
-        `${API_BASE_URL}/admin/broker-clients/${broker._id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Cache-Control': 'no-cache',
-          },
-        }
-      );
+      // Fetch clients and invites in parallel
+      const [response, invitesResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/broker-clients/${broker._id}`, {
+          headers: { Authorization: `Bearer ${authToken}`, 'Cache-Control': 'no-cache' },
+        }),
+        fetch(`${API_BASE_URL}/admin/invites/pending/${broker._id}`, {
+          headers: { Authorization: `Bearer ${authToken}`, 'Cache-Control': 'no-cache' },
+        }),
+      ]);
 
       if (response.ok) {
         const data = await response.json();
@@ -72,31 +71,66 @@ const RemindersScreen = () => {
           
           if (client?.reminders && client.reminders.length > 0) {
             client.reminders.forEach((reminder) => {
-              if (reminder.isActive !== false) {
-                serverReminders.push({
-                  id: reminder._id,
-                  date: reminder.date,
-                  comment: reminder.comment,
-                  type: reminder.type,
-                  clientId: client._id,
-                  clientName: client.name || client.firstName || 'Client',
-                  clientPhone: client.phone,
-                  createdAt: reminder.createdAt,
-                  // Store full client data for navigation
-                  clientData: {
-                    _id: client._id,
-                    name: client.name,
-                    email: client.email,
-                    phone: client.phone,
-                    type: client.type,
-                    status: client.status,
-                    mbActivityStatus: client.mbActivityStatus,
-                  },
-                });
-              }
+              // Include ALL reminders for display (active and inactive).
+              // isActive=false just means superseded by a newer reminder — still valid history.
+              serverReminders.push({
+                id: reminder._id,
+                date: reminder.date,
+                comment: reminder.comment,
+                type: reminder.type,
+                isActive: reminder.isActive !== false,
+                clientId: client._id,
+                clientName: client.name || client.firstName || 'Client',
+                clientPhone: client.phone,
+                createdAt: reminder.createdAt,
+                sourceType: 'client',
+                clientData: {
+                  _id: client._id,
+                  name: client.name,
+                  email: client.email,
+                  phone: client.phone,
+                  type: client.type,
+                  status: client.status,
+                  mbActivityStatus: client.mbActivityStatus,
+                },
+              });
             });
           }
         });
+
+        // Flatten reminders from pending invites (realtor/invite follow-ups)
+        if (invitesResponse.ok) {
+          const invitesData = await invitesResponse.json();
+          const invites = invitesData.invites || [];
+          console.log('📨 [fetchReminders] Invite reminders from', invites.length, 'invites');
+          invites.forEach((invite) => {
+            if (!invite.reminders || invite.reminders.length === 0) return;
+            invite.reminders.forEach((reminder) => {
+              serverReminders.push({
+                id: reminder._id,
+                date: reminder.date,
+                comment: reminder.comment,
+                type: reminder.type,
+                isActive: reminder.isActive !== false,
+                clientId: invite._id,
+                clientName: invite.clientName || 'Invite',
+                clientPhone: invite.clientPhone,
+                createdAt: reminder.createdAt,
+                sourceType: 'invite',
+                clientData: {
+                  _id: invite._id,
+                  name: invite.clientName,
+                  email: invite.clientEmail,
+                  phone: invite.clientPhone,
+                  type: 'pending',
+                  status: 'Pending',
+                  mbActivityStatus: 'Pending',
+                  realtorInfo: { name: invite.realtorName, phone: invite.realtorPhone },
+                },
+              });
+            });
+          });
+        }
 
         console.log('📋 Server reminders found:', serverReminders.length);
 
@@ -137,7 +171,8 @@ const RemindersScreen = () => {
           const notificationIds = { ...cleanedNotificationIds };
           for (const reminder of serverReminders) {
             const reminderDate = new Date(reminder.date);
-            if (reminderDate > now && !notificationIds[reminder.id]) {
+            // Only schedule notifications for active future reminders
+            if (reminderDate > now && reminder.isActive && !notificationIds[reminder.id]) {
               const notificationId = await scheduleReminderNotification(reminder, reminder.clientName);
               if (notificationId) {
                 notificationIds[reminder.id] = notificationId;
@@ -181,62 +216,82 @@ const RemindersScreen = () => {
   const organizeSections = (remindersList, filter) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - 7);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const pastWeekStart = new Date(today);
+    pastWeekStart.setDate(pastWeekStart.getDate() - 7);
 
     // Filter based on selected filter
     const filteredReminders = filter === 'Upcoming'
       ? remindersList.filter(r => new Date(r.date) >= now)
       : remindersList.filter(r => new Date(r.date) < now);
 
+    console.log(`📅 [organizeSections] filter=${filter} total=${remindersList.length} filtered=${filteredReminders.length}`);
+
     // Group reminders by time period
     const grouped = {
       today: [],
-      yesterday: [],
+      tomorrow: [],
       thisWeek: [],
+      later: [],
+      yesterday: [],
+      pastWeek: [],
       older: [],
     };
 
     filteredReminders.forEach(reminder => {
       const reminderDate = new Date(reminder.date);
       const reminderDay = new Date(reminderDate.getFullYear(), reminderDate.getMonth(), reminderDate.getDate());
+      const t = reminderDay.getTime();
 
-      if (reminderDay.getTime() === today.getTime()) {
-        grouped.today.push(reminder);
-      } else if (reminderDay.getTime() === yesterday.getTime()) {
-        grouped.yesterday.push(reminder);
-      } else if (reminderDay >= weekStart) {
-        grouped.thisWeek.push(reminder);
+      if (filter === 'Upcoming') {
+        if (t === today.getTime()) {
+          grouped.today.push(reminder);
+        } else if (t === tomorrow.getTime()) {
+          grouped.tomorrow.push(reminder);
+        } else if (reminderDay <= nextWeek) {
+          grouped.thisWeek.push(reminder);
+        } else {
+          grouped.later.push(reminder);
+        }
       } else {
-        grouped.older.push(reminder);
+        if (t === today.getTime()) {
+          grouped.today.push(reminder);
+        } else if (t === yesterday.getTime()) {
+          grouped.yesterday.push(reminder);
+        } else if (reminderDay >= pastWeekStart) {
+          grouped.pastWeek.push(reminder);
+        } else {
+          grouped.older.push(reminder);
+        }
       }
     });
+
+    console.log(`📅 [organizeSections] groups:`, Object.fromEntries(Object.entries(grouped).map(([k,v]) => [k, v.length])));
 
     // Sort reminders within groups
     const sortByDate = filter === 'Upcoming'
       ? (a, b) => new Date(a.date) - new Date(b.date)
       : (a, b) => new Date(b.date) - new Date(a.date);
 
-    grouped.today.sort(sortByDate);
-    grouped.yesterday.sort(sortByDate);
-    grouped.thisWeek.sort(sortByDate);
-    grouped.older.sort(sortByDate);
+    Object.values(grouped).forEach(arr => arr.sort(sortByDate));
 
     // Create sections array
     const newSections = [];
-    if (grouped.today.length > 0) {
-      newSections.push({ title: 'TODAY', data: grouped.today });
-    }
-    if (grouped.yesterday.length > 0) {
-      newSections.push({ title: 'YESTERDAY', data: grouped.yesterday });
-    }
-    if (grouped.thisWeek.length > 0) {
-      newSections.push({ title: 'THIS WEEK', data: grouped.thisWeek });
-    }
-    if (grouped.older.length > 0) {
-      newSections.push({ title: filter === 'Upcoming' ? 'UPCOMING' : 'OLDER', data: grouped.older });
+    if (filter === 'Upcoming') {
+      if (grouped.today.length > 0)    newSections.push({ title: 'TODAY', data: grouped.today });
+      if (grouped.tomorrow.length > 0) newSections.push({ title: 'TOMORROW', data: grouped.tomorrow });
+      if (grouped.thisWeek.length > 0) newSections.push({ title: 'THIS WEEK', data: grouped.thisWeek });
+      if (grouped.later.length > 0)    newSections.push({ title: 'LATER', data: grouped.later });
+    } else {
+      if (grouped.today.length > 0)     newSections.push({ title: 'TODAY', data: grouped.today });
+      if (grouped.yesterday.length > 0) newSections.push({ title: 'YESTERDAY', data: grouped.yesterday });
+      if (grouped.pastWeek.length > 0)  newSections.push({ title: 'THIS WEEK', data: grouped.pastWeek });
+      if (grouped.older.length > 0)     newSections.push({ title: 'OLDER', data: grouped.older });
     }
 
     setSections(newSections);
@@ -430,10 +485,15 @@ const RemindersScreen = () => {
   const renderReminderItem = ({ item }) => {
     const display = formatReminderDisplay(item);
     const isInactive = item.clientData?.mbActivityStatus === 'Inactive';
+    const isSuperseded = item.isActive === false;
     
     return (
       <TouchableOpacity
-        style={[styles.reminderItem, isInactive && styles.reminderItemInactive]}
+        style={[
+          styles.reminderItem,
+          isInactive && styles.reminderItemInactive,
+          isSuperseded && { opacity: 0.4 },
+        ]}
         onPress={() => handleClientPress(item)}
         activeOpacity={0.7}
       >
